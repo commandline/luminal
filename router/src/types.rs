@@ -19,40 +19,50 @@ impl Route {
 
     /// Add the specified handler at the given route.
     pub fn add(&mut self, route: &str, handler: String) -> Result<()> {
-        // TODO re-factor into iterative
-        fn go(
-            idx: usize,
-            tokens: &[&str],
-            current: &mut HashMap<String, PathComp>,
-            handler: String,
-        ) {
-            if let Some(comp) = current.get_mut(tokens[idx]) {
-                if idx + 1 == tokens.len() {
-                    comp.handler = Some(handler);
-                    return;
-                } else {
-                    go(idx + 1, tokens, &mut comp.next, handler);
-                    return;
-                }
-            }
-
-            if current.get(tokens[idx]).is_none() {
-                let mut comp = PathComp::new(tokens[idx], None);
-                if idx + 1 == tokens.len() {
-                    comp.handler = Some(handler);
-                    current.insert(tokens[idx].to_owned(), comp);
-                } else {
-                    go(idx + 1, tokens, &mut comp.next, handler);
-                    current.insert(tokens[idx].to_owned(), comp);
-                }
-            }
-        }
-
         let tokens = path_to_tokens(route)?;
         if tokens.len() == 1 {
             self.root.handler = Some(handler)
         } else {
-            go(1, &tokens, &mut self.root.next, handler);
+            let mut exists = vec![];
+            exists.push(&mut self.root);
+            let tokens_len = tokens.len();
+            let mut created = tokens.iter().enumerate().fold(
+                Vec::new(),
+                |mut created, (idx, token)| {
+                    if idx != 0 {
+                        let last = exists.pop().expect("Should always have a last component");
+                        if last.next.contains_key(*token) {
+                            let next = last.next.get_mut(*token);
+                            if let Some(next) = next {
+                                if idx + 1 == tokens_len {
+                                    next.handler = Some(handler.clone());
+                                }
+                                exists.push(next);
+                            }
+                        } else {
+                            exists.push(last);
+                            if idx + 1 == tokens_len {
+                                created.push(PathComp::new(token, Some(handler.clone())));
+                            } else {
+                                created.push(PathComp::new(token, None));
+                            }
+                        }
+                    }
+                    created
+                },
+            );
+            while !created.is_empty() {
+                let comp = created.pop();
+                if let Some(comp) = comp {
+                    if let Some(last) = created.last_mut() {
+                        last.next.insert(comp.path.clone(), comp);
+                    } else if let Some(last) = exists.pop() {
+                        last.next.insert(comp.path.clone(), comp);
+                    } else {
+                        bail!("Could not fully wire up route {}", route);
+                    }
+                }
+            }
         }
 
         Ok(())
