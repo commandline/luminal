@@ -34,16 +34,11 @@ impl Route {
                         if last.next.contains_key(*token) {
                             let next = last.next.get_mut(*token);
                             if let Some(next) = next {
-                                if idx + 1 == tokens_len {
-                                    next.handler = Some(handler.clone());
-                                }
                                 exists.push(next);
                             }
                         } else {
                             exists.push(last);
-                            if idx + 1 == tokens_len {
-                                created.push(PathComp::new(token, Some(handler.clone())));
-                            } else {
+                            if idx < tokens_len {
                                 created.push(PathComp::new(token, None));
                             }
                         }
@@ -51,15 +46,25 @@ impl Route {
                     created
                 },
             );
-            while !created.is_empty() {
-                let comp = created.pop();
-                if let Some(comp) = comp {
-                    if let Some(last) = created.last_mut() {
-                        last.next.insert(comp.path.clone(), comp);
-                    } else if let Some(last) = exists.pop() {
-                        last.next.insert(comp.path.clone(), comp);
-                    } else {
-                        bail!("Could not fully wire up route {}", route);
+            if created.is_empty() {
+                if let Some(last) = exists.pop() {
+                    last.handler = Some(handler);
+                }
+            } else {
+                if let Some(mut last) = created.pop() {
+                    last.handler = Some(handler);
+                    created.push(last);
+                }
+                while !created.is_empty() {
+                    let comp = created.pop();
+                    if let Some(comp) = comp {
+                        if let Some(last) = created.last_mut() {
+                            last.next.insert(comp.path.clone(), comp);
+                        } else if let Some(last) = exists.pop() {
+                            last.next.insert(comp.path.clone(), comp);
+                        } else {
+                            bail!("Could not fully wire up route {}", route);
+                        }
                     }
                 }
             }
