@@ -26,26 +26,23 @@ impl Route {
             let mut exists = vec![];
             exists.push(&mut self.root);
             let tokens_len = tokens.len();
-            let mut created = tokens.iter().enumerate().fold(
-                Vec::new(),
-                |mut created, (idx, token)| {
-                    if idx != 0 {
-                        let last = exists.pop().expect("Should always have a last component");
-                        if last.next.contains_key(*token) {
-                            let next = last.next.get_mut(*token);
-                            if let Some(next) = next {
-                                exists.push(next);
-                            }
-                        } else {
-                            exists.push(last);
-                            if idx < tokens_len {
-                                created.push(PathComp::new(token, None));
-                            }
+            let mut created = tokens
+                .iter()
+                // start with the first non-root component of the route
+                .skip(1)
+                .fold(Vec::new(), |mut created, token| {
+                    let last = exists.pop().expect("Should always have a last component");
+                    if last.next.contains_key(*token) {
+                        let next = last.next.get_mut(*token);
+                        if let Some(next) = next {
+                            exists.push(next);
                         }
+                    } else {
+                        exists.push(last);
+                        created.push(PathComp::new(token, None));
                     }
                     created
-                },
-            );
+                });
             if created.is_empty() {
                 if let Some(last) = exists.pop() {
                     last.handler = Some(handler);
@@ -74,25 +71,23 @@ impl Route {
     }
 
     pub fn dispatch<'a>(&'a self, request_path: &str) -> Result<&'a Option<String>> {
-        // TODO re-factor into iterative
-        fn go<'a>(
-            idx: usize,
-            tokens: &[&str],
-            current: &'a HashMap<String, PathComp>,
-        ) -> Result<&'a Option<String>> {
-            if let Some(current) = current.get(tokens[idx]) {
-                if idx + 1 == tokens.len() {
-                    Ok(&current.handler)
-                } else {
-                    go(idx + 1, tokens, &current.next)
-                }
-            } else {
-                bail!("Path not found!")
-            }
-        }
-
         let tokens = path_to_tokens(request_path)?;
-        go(1, &tokens, &self.root.next)
+        let comp = tokens
+            .iter()
+            // start with the first non-root component of the route
+            .skip(1)
+            .fold(Some(&self.root), |comp, token| {
+                if let Some(comp) = comp {
+                    comp.next.get(*token)
+                } else {
+                    None
+                }
+            });
+        if let Some(comp) = comp {
+            Ok(&comp.handler)
+        } else {
+            bail!("Path not found!")
+        }
     }
 }
 
