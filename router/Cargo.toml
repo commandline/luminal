@@ -5,3 +5,8 @@ authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
 
 [dependencies]
 error-chain = "0.11"
+futures = "0.1"
+hyper = "0.11"
+
+[dev-dependencies]
+tokio-core = "0.1"
