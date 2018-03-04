@@ -69,9 +69,9 @@ impl<T> RouteTree<T> {
     ///
     /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
     /// found.
-    pub fn dispatch<'a>(&'a self, request_path: &str) -> Result<&'a Option<T>> {
-        let tokens = path_to_tokens(request_path)?;
-        let comp = tokens
+    pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<&'a Option<T>> {
+        if let Ok(tokens) = path_to_tokens(request_path) {
+            let comp = tokens
             .iter()
             // start with the first non-root component of the route
             .skip(1)
@@ -82,10 +82,13 @@ impl<T> RouteTree<T> {
                     None
                 }
             });
-        if let Some(comp) = comp {
-            Ok(&comp.handler)
+            if let Some(comp) = comp {
+                Some(&comp.handler)
+            } else {
+                None
+            }
         } else {
-            bail!("Path not found!")
+            None
         }
     }
 
@@ -264,16 +267,7 @@ mod tests {
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error");
-        let found = route.dispatch("/foo");
-        if let Ok(found) = found {
-            assert_eq!(
-                None, *found,
-                "Should not have found handler, {:?}",
-                route.root
-            );
-        } else {
-            panic!("Error searching {:?}", found.unwrap_err());
-        }
+        assert_dispatch(&route, "/foo", "");
     }
 
     fn sub_route2(parent: &str, first: &str, second: &str) -> PathComp<String> {
@@ -291,7 +285,7 @@ mod tests {
 
     fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
         let found = route.dispatch(route_path);
-        if let Ok(found) = found {
+        if let Some(found) = found {
             assert_eq!(
                 if handler.is_empty() {
                     None
@@ -303,7 +297,7 @@ mod tests {
                 route.root
             );
         } else {
-            panic!("Error searching {:?}", found.unwrap_err());
+            panic!("Not found");
         }
     }
 }

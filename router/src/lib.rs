@@ -34,11 +34,11 @@ impl Service for Router {
 
     fn call(&self, req: Request) -> Self::Future {
         let handler = self.dispatch(req.method(), req.path());
-        if let Ok(&Some(ref handler)) = handler {
+        if let Some(&Some(ref handler)) = handler {
             handler.call(req)
         } else {
             let mut response = Response::new();
-            response.set_status(StatusCode::InternalServerError);
+            response.set_status(StatusCode::NotFound);
             Box::new(future::ok(response))
         }
     }
@@ -111,11 +111,11 @@ impl Router {
         &'a self,
         method: &Method,
         route_path: &str,
-    ) -> Result<&'a Option<Box<LuminalService>>> {
+    ) -> Option<&'a Option<Box<LuminalService>>> {
         if let Some(routing) = self.routes.get(method) {
             routing.dispatch(route_path)
         } else {
-            bail!("No routes for {}", method)
+            None
         }
     }
 }
@@ -179,6 +179,29 @@ mod tests {
         assert_call(&router, Method::Get, "/foo/bar", "Get bar");
         assert_call(&router, Method::Post, "/foo/bar", "Post bar");
         assert_call(&router, Method::Get, "/foo/baz", "Baz");
+    }
+
+    #[test]
+    fn test_not_found() {
+        let router = Router::new();
+
+        let uri = "/foo"
+            .parse()
+            .expect("Should have been able to convert to uri");
+        let req: Request<Body> = Request::new(Method::Get, uri);
+
+        let work = router.call(req);
+
+        let mut core = Core::new().expect("Should have been able to create core");
+
+        let response = core.run(work)
+            .expect("Should have been able to run router call");
+
+        assert_eq!(
+            StatusCode::NotFound,
+            response.status(),
+            "Should have received not found status."
+        );
     }
 
     fn assert_call(router: &Router, method: Method, uri: &str, expected: &str) {
