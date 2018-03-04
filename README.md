@@ -17,6 +17,14 @@ take off the rough edges. The design philosophy is for each feature to be
 entirely optional. Use as much or as little as you want, falling back to hyper
 where you want low level access.
 
+Why so minimal? For speed and scale. By creating each piece as an optional and
+independent crate, they can each be designed, tested and bench marked to keep
+any added cost as small as possible. There are tons of high level frameworks,
+even in Rust, where convenience and developer support are higher priorities.
+luminal is being written to support a low level infrastructure project. While
+it may have some conveniences, it needs to result in web applications that are
+fast and scale well, first and foremost.
+
 Another important goal of luminal is to make testing as easy as possible. Iron
 had a nice test package that made it easy to build up requests and examine
 responses. There wasn't a need to run an actual server to test application
@@ -41,7 +49,7 @@ Each one of these is likely to be a crate in this project, with its own
 respective TODO list.
 
 * [x] Add a router.
-* [ ] Add service utilities, an opt in simpler interface for handlers.
+* [x] Add service utilities, an opt in simpler interface for handlers.
 * [ ] Add middleware utilities, for wrapping services.
 * [ ] Add request parameter parsing.
 * [ ] Add body parsing.
