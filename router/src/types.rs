@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use error::*;
 
 /// Route mapping as a radix trie.
-pub struct Route<T> {
+pub struct RouteTree<T> {
     root: PathComp<T>,
 }
 
-impl<T> Route<T> {
+impl<T> RouteTree<T> {
     /// Create a new route mapping with an index component and no handler.
     pub fn new() -> Self {
-        Route {
+        RouteTree {
             root: PathComp::new("", None),
         }
     }
@@ -59,7 +59,7 @@ impl<T> Route<T> {
                     created
                 });
 
-            Route::wire_handler(&mut last_existing, &mut created, route, handler)?;
+            RouteTree::wire_handler(&mut last_existing, &mut created, route, handler)?;
         }
 
         Ok(self)
@@ -171,7 +171,7 @@ mod tests {
         let bar = PathComp::new("bar", Some(String::from("Bar")));
         foo.next.insert(String::from("bar"), bar);
         expected.next.insert(String::from("foo"), foo);
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error");
@@ -184,7 +184,7 @@ mod tests {
         let foo = sub_route2("foo", "bar", "baz");
         let mut expected = PathComp::new("", None);
         expected.next.insert(String::from("foo"), foo);
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("BAR"))
             .expect("Should have added route without error")
@@ -203,7 +203,7 @@ mod tests {
             PathComp::new("bar", Some(String::from("Bar"))),
         );
         expected.next.insert(String::from("foo"), foo);
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar/", String::from("Bar"))
             .expect("Should have added route without error");
@@ -216,7 +216,7 @@ mod tests {
     // Test that we can find an added path
     #[test]
     pub fn test_dispatch() {
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error");
@@ -226,7 +226,7 @@ mod tests {
     // Test that we can find an added path with a more complex routing trie
     #[test]
     pub fn test_dispatch_two() {
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error")
@@ -240,7 +240,7 @@ mod tests {
     // Test that we can find an added path with a more complex routing trie
     #[test]
     pub fn test_dispatch_complex() {
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error")
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     pub fn test_partial() {
-        let mut route = Route::new();
+        let mut route = RouteTree::new();
         route
             .add("/foo/bar", String::from("Bar"))
             .expect("Should have added route without error");
@@ -289,7 +289,7 @@ mod tests {
         comp
     }
 
-    fn assert_dispatch(route: &Route<String>, route_path: &str, handler: &str) {
+    fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
         let found = route.dispatch(route_path);
         if let Ok(found) = found {
             assert_eq!(

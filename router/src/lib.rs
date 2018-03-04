@@ -14,11 +14,11 @@ use hyper::server::{Request, Response, Service};
 use std::collections::HashMap;
 
 use error::*;
-use self::types::Route;
+use self::types::RouteTree;
 
 /// Router for Hyper.
 pub struct Router {
-    routes: HashMap<Method, Route<String>>,
+    routes: HashMap<Method, RouteTree<String>>,
 }
 
 impl Service for Router {
@@ -63,7 +63,7 @@ impl Router {
     /// Add a handler at the specific route path for the given `Method`.
     pub fn add(&mut self, method: Method, route: &str, handler: String) -> Result<&mut Self> {
         {
-            let routing = self.routes.entry(method).or_insert(Route::new());
+            let routing = self.routes.entry(method).or_insert(RouteTree::new());
             routing.add(route, handler)?;
         }
         Ok(self)
