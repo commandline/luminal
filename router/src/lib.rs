@@ -18,7 +18,7 @@ use self::types::Route;
 
 /// Router for Hyper.
 pub struct Router {
-    routes: HashMap<Method, Route>,
+    routes: HashMap<Method, Route<String>>,
 }
 
 impl Service for Router {

@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use error::*;
 
 /// Route mapping as a radix trie.
-pub struct Route {
-    root: PathComp,
+pub struct Route<T> {
+    root: PathComp<T>,
 }
 
-impl Route {
+impl<T> Route<T> {
     /// Create a new route mapping with an index component and no handler.
     pub fn new() -> Self {
         Route {
@@ -19,7 +19,7 @@ impl Route {
     ///
     /// This method will update the internal trie used to store searchable routes. It will append
     /// any unknown path components in the route and assign the handler to the new, full route.
-    pub fn add(&mut self, route: &str, handler: String) -> Result<&mut Self> {
+    pub fn add(&mut self, route: &str, handler: T) -> Result<&mut Self> {
         let tokens = path_to_tokens(route)?;
 
         // updating the root route handler is a special case that doesn't require any trie
@@ -69,7 +69,7 @@ impl Route {
     ///
     /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
     /// found.
-    pub fn dispatch<'a>(&'a self, request_path: &str) -> Result<&'a Option<String>> {
+    pub fn dispatch<'a>(&'a self, request_path: &str) -> Result<&'a Option<T>> {
         let tokens = path_to_tokens(request_path)?;
         let comp = tokens
             .iter()
@@ -92,10 +92,10 @@ impl Route {
     // Consume the handler, assigning it to the terminal component of the routing path, adding any
     // new routing path components into the existing trie as needed
     fn wire_handler(
-        last_existing: &mut Vec<&mut PathComp>,
-        created: &mut Vec<PathComp>,
+        last_existing: &mut Vec<&mut PathComp<T>>,
+        created: &mut Vec<PathComp<T>>,
         route: &str,
-        handler: String,
+        handler: T,
     ) -> Result<()> {
         // the route isn't new, only the handler is
         if created.is_empty() {
@@ -143,14 +143,14 @@ fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
 /// Since the radix trie doesn't need to split the path components, use a hash map as an efficient
 /// to connect the nodes.
 #[derive(Debug, PartialEq)]
-struct PathComp {
+struct PathComp<T> {
     path: String,
-    next: HashMap<String, PathComp>,
-    handler: Option<String>,
+    next: HashMap<String, PathComp<T>>,
+    handler: Option<T>,
 }
 
-impl PathComp {
-    fn new(path: &str, handler: Option<String>) -> PathComp {
+impl<T> PathComp<T> {
+    fn new(path: &str, handler: Option<T>) -> PathComp<T> {
         PathComp {
             path: path.to_owned(),
             next: HashMap::new(),
@@ -276,7 +276,7 @@ mod tests {
         }
     }
 
-    fn sub_route2(parent: &str, first: &str, second: &str) -> PathComp {
+    fn sub_route2(parent: &str, first: &str, second: &str) -> PathComp<String> {
         let mut comp = PathComp::new(parent, None);
         comp.next.insert(
             first.to_owned(),
@@ -289,7 +289,7 @@ mod tests {
         comp
     }
 
-    fn assert_dispatch(route: &Route, route_path: &str, handler: &str) {
+    fn assert_dispatch(route: &Route<String>, route_path: &str, handler: &str) {
         let found = route.dispatch(route_path);
         if let Ok(found) = found {
             assert_eq!(
