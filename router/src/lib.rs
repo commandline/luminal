@@ -8,7 +8,6 @@ mod types;
 
 use futures::future::{self, Future};
 use hyper::{Method, StatusCode};
-use hyper::header::ContentLength;
 use hyper::server::{Request, Response, Service};
 
 use std::collections::HashMap;
@@ -16,25 +15,27 @@ use std::collections::HashMap;
 use error::*;
 use self::types::RouteTree;
 
+/// Convenience, especially for `hyper::service::service_fn`.
+pub type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
+
+type LuminalService =
+    Service<Request = Request, Response = Response, Error = hyper::Error, Future = ServiceFuture>;
+
 /// Router for Hyper.
 pub struct Router {
-    routes: HashMap<Method, RouteTree<String>>,
+    routes: HashMap<Method, RouteTree<Box<LuminalService>>>,
 }
 
 impl Service for Router {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+    type Future = ServiceFuture;
 
     fn call(&self, req: Request) -> Self::Future {
         let handler = self.dispatch(req.method(), req.path());
         if let Ok(&Some(ref handler)) = handler {
-            Box::new(future::ok(
-                Response::new()
-                    .with_header(ContentLength(handler.len() as u64))
-                    .with_body(handler.to_owned()),
-            ))
+            handler.call(req)
         } else {
             let mut response = Response::new();
             response.set_status(StatusCode::InternalServerError);
@@ -51,25 +52,66 @@ impl Router {
     }
 
     /// Add a handler for `Method::Get` at the specified route.
-    pub fn get(&mut self, route: &str, handler: String) -> Result<&mut Self> {
+    pub fn get<
+        H: Service<
+            Request = Request,
+            Response = Response,
+            Error = hyper::Error,
+            Future = ServiceFuture,
+        >
+            + 'static,
+    >(
+        &mut self,
+        route: &str,
+        handler: H,
+    ) -> Result<&mut Self> {
         self.add(Method::Get, route, handler)
     }
 
     /// Add a handler for `Method::Post` at the specified route.
-    pub fn post(&mut self, route: &str, handler: String) -> Result<&mut Self> {
+    pub fn post<
+        H: Service<
+            Request = Request,
+            Response = Response,
+            Error = hyper::Error,
+            Future = ServiceFuture,
+        >
+            + 'static,
+    >(
+        &mut self,
+        route: &str,
+        handler: H,
+    ) -> Result<&mut Self> {
         self.add(Method::Post, route, handler)
     }
 
     /// Add a handler at the specific route path for the given `Method`.
-    pub fn add(&mut self, method: Method, route: &str, handler: String) -> Result<&mut Self> {
+    pub fn add<
+        H: Service<
+            Request = Request,
+            Response = Response,
+            Error = hyper::Error,
+            Future = ServiceFuture,
+        >
+            + 'static,
+    >(
+        &mut self,
+        method: Method,
+        route: &str,
+        handler: H,
+    ) -> Result<&mut Self> {
         {
             let routing = self.routes.entry(method).or_insert(RouteTree::new());
-            routing.add(route, handler)?;
+            routing.add(route, Box::new(handler))?;
         }
         Ok(self)
     }
 
-    fn dispatch<'a>(&'a self, method: &Method, route_path: &str) -> Result<&'a Option<String>> {
+    fn dispatch<'a>(
+        &'a self,
+        method: &Method,
+        route_path: &str,
+    ) -> Result<&'a Option<Box<LuminalService>>> {
         if let Some(routing) = self.routes.get(method) {
             routing.dispatch(route_path)
         } else {
@@ -83,22 +125,55 @@ mod tests {
     extern crate tokio_core;
 
     use hyper::Body;
+    use hyper::header::ContentLength;
+    use hyper::server;
     use futures::Stream;
 
     use self::tokio_core::reactor::Core;
 
     use super::*;
 
+    struct StringHandler(String);
+
+    impl Service for StringHandler {
+        type Request = Request;
+        type Response = Response;
+        type Error = hyper::Error;
+        type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+        fn call(&self, _req: Request) -> Self::Future {
+            Box::new(future::ok(
+                Response::new()
+                    .with_header(ContentLength(self.0.len() as u64))
+                    .with_body(self.0.clone()),
+            ))
+        }
+    }
+
+    impl StringHandler {
+        fn new(msg: &str) -> Self {
+            StringHandler(msg.to_owned())
+        }
+    }
+
+    fn get_bar_handler(_req: Request) -> ServiceFuture {
+        let msg = String::from("Get bar");
+        Box::new(future::ok(
+            Response::new()
+                .with_header(ContentLength(msg.len() as u64))
+                .with_body(msg),
+        ))
+    }
+
     #[test]
     fn test_router() {
         let mut router = Router::new();
 
         router
-            .get("/foo/bar", String::from("Get bar"))
+            .get("/foo/bar", server::service_fn(get_bar_handler))
             .expect("Should have been able to add route")
-            .get("/foo/baz", String::from("Baz"))
+            .get("/foo/baz", StringHandler::new("Baz"))
             .expect("Should have been able to add route")
-            .post("/foo/bar", String::from("Post bar"))
+            .post("/foo/bar", StringHandler::new("Post bar"))
             .expect("Should have been able to add route");
 
         assert_call(&router, Method::Get, "/foo/bar", "Get bar");
