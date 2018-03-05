@@ -61,10 +61,10 @@ impl Router {
         >
             + 'static,
     >(
-        &mut self,
+        self,
         route: &str,
         handler: H,
-    ) -> Result<&mut Self> {
+    ) -> Result<Self> {
         self.add(Method::Get, route, handler)
     }
 
@@ -78,10 +78,10 @@ impl Router {
         >
             + 'static,
     >(
-        &mut self,
+        self,
         route: &str,
         handler: H,
-    ) -> Result<&mut Self> {
+    ) -> Result<Self> {
         self.add(Method::Post, route, handler)
     }
 
@@ -95,11 +95,11 @@ impl Router {
         >
             + 'static,
     >(
-        &mut self,
+        mut self,
         method: Method,
         route: &str,
         handler: H,
-    ) -> Result<&mut Self> {
+    ) -> Result<Self> {
         {
             let routing = self.routes.entry(method).or_insert(RouteTree::new());
             routing.add(route, Box::new(handler))?;
@@ -107,7 +107,7 @@ impl Router {
         Ok(self)
     }
 
-    fn dispatch<'a>(
+    pub fn dispatch<'a>(
         &'a self,
         method: &Method,
         route_path: &str,
@@ -166,9 +166,7 @@ mod tests {
 
     #[test]
     fn test_router() {
-        let mut router = Router::new();
-
-        router
+        let router = Router::new()
             .get("/foo/bar", server::service_fn(get_bar_handler))
             .expect("Should have been able to add route")
             .get("/foo/baz", StringHandler::new("Baz"))
