@@ -84,29 +84,6 @@ fn immediate_miss_deep(bencher: &mut Bencher) {
     bencher.iter(|| router.dispatch(&Method::Get, &to_find));
 }
 
-#[bench]
-fn iter_deeper(bencher: &mut Bencher) {
-    let router = permute_map(5, 100);
-
-    let mut to_find = String::from("/");
-    for x in 0..100 {
-        to_find += &format!("{}/", x);
-    }
-
-    let tokens: Vec<&str> = to_find.trim_left_matches('/').split('/').collect();
-
-    let routes = router
-        .routes
-        .get(&Method::Get)
-        .expect("Should have been able to get route tree");
-    bencher.iter(|| {
-        let iter = routes
-            .iter(&tokens)
-            .expect("Should have been able to get iter");
-        iter.last()
-    });
-}
-
 fn permute_map(breadth: usize, depth: usize) -> Router {
     let mut router = Router::new();
     let mut path_prefix = String::from("/");

@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::str::Split;
 
 use error::*;
 
-/// Route mapping as a radix trie.
+/// Route mapping as a radix tree.
 pub struct RouteTree<T> {
-    pub root: PathNode<T>,
+    root: PathNode<T>,
 }
 
 impl<T> RouteTree<T> {
@@ -20,7 +21,11 @@ impl<T> RouteTree<T> {
     /// This method will update the internal trie used to store searchable routes. It will append
     /// any unknown path components in the route and assign the handler to the new, full route.
     pub fn add(&mut self, route: &str, handler: T) -> Result<&mut Self> {
-        let tokens = path_to_tokens(route)?;
+        let path = route.trim_right_matches('/');
+        let tokens: Vec<&str> = path.split('/').collect();
+        if tokens[0] != "" {
+            bail!("Paths must start with a slash (/)")
+        }
 
         // updating the root route handler is a special case that doesn't require any trie
         // traversal
@@ -29,13 +34,17 @@ impl<T> RouteTree<T> {
             return Ok(self);
         }
 
-        // limit the borrow of self needed to update the internal trie so that this method can
+        // limit the borrow of self needed to update the internal tree so that this method can
         // return a reference to this struct to support fluent calling
         {
             // a single element stack to track the new last already existing component in the route
             let mut last_existing = vec![];
             last_existing.push(&mut self.root);
 
+            // unlike dispatch, adding a route needs a mutable reference to the last match in the
+            // existing tree; implementing a mutable iterator is non-trivial and isn't warranted
+            // here since adding routes is likely to not be anywhere as performance sensitive as
+            // dispatching
             let mut created = tokens
                 .iter()
                 // start with the first non-root component of the route
@@ -70,18 +79,14 @@ impl<T> RouteTree<T> {
     /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
     /// found.
     pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<&'a Option<T>> {
-        let path = request_path.trim_left_matches('/');
-        let tokens: Vec<&str> = path.split('/').collect();
-        if let Ok(iter) = self.iter(&tokens) {
-            if let Some((remaining, found)) = iter.last() {
-                if 0 == remaining {
-                    Some(&found.handler)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+        let path = request_path.trim_left_matches("/");
+        if path == "" {
+            return Some(&self.root.handler);
+        }
+        let mut tokens = path.split("/");
+        let iter = self.iter(&mut tokens);
+        if let Some(found) = iter.last() {
+            Some(&found.handler)
         } else {
             None
         }
@@ -124,30 +129,26 @@ impl<T> RouteTree<T> {
         Ok(())
     }
 
-    pub fn iter<'a, 'b>(&'a self, tokens: &'b [&'b str]) -> Result<Iter<'a, 'b, T>> {
-        Ok(Iter {
-            index: 0,
+    fn iter<'a, 'b>(&'a self, tokens: &'b mut Split<'b, &'b str>) -> Iter<'a, 'b, T> {
+        Iter {
             tokens,
             previous: &self.root,
-        })
+        }
     }
 }
 
-pub struct Iter<'a, 'b, T: 'a> {
-    index: usize,
-    tokens: &'b [&'b str],
+struct Iter<'a, 'b, T: 'a> {
+    tokens: &'b mut Split<'b, &'b str>,
     previous: &'a PathNode<T>,
 }
 
 impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
-    type Item = (usize, &'a PathNode<T>);
+    type Item = &'a PathNode<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.tokens.len() {
-            let token = &self.tokens[self.index];
-            self.index += 1;
-            if let Some(next) = self.previous.next.get(*token) {
+        if let Some(token) = self.tokens.next() {
+            if let Some(next) = self.previous.next.get(token) {
                 self.previous = next;
-                Some((self.tokens.len() - self.index, &next))
+                Some(&next)
             } else {
                 None
             }
@@ -162,7 +163,7 @@ impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
 /// Since the radix trie doesn't need to split the path components, use a hash map as an efficient
 /// to connect the nodes.
 #[derive(Debug, PartialEq)]
-pub struct PathNode<T> {
+struct PathNode<T> {
     path: String,
     next: HashMap<String, PathNode<T>>,
     handler: Option<T>,
@@ -176,17 +177,6 @@ impl<T> PathNode<T> {
             handler,
         }
     }
-}
-
-// Not only splits an arbitrary string path, ensures that it is well formed for our purposes, that
-// means they start with a slash and if then end with a slash, we trim that terminals slash
-fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
-    let path = path.trim_right_matches('/');
-    let tokens: Vec<&str> = path.split('/').collect();
-    if tokens[0] != "" {
-        bail!("Paths must start with a slash (/)")
-    }
-    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -317,55 +307,56 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let tokens: Vec<&str> = "foo".split('/').collect();
-        let (remaining, last) = route
-            .iter(&tokens)
-            .expect("Should have been able to get iterator")
-            .last()
-            .expect("Should have found last node");
+        let mut tokens = "foo".split("/");
 
-        assert_eq!(None, last.handler, "Should not have found handler");
-        assert_eq!(0, remaining, "Search should have been exhausted");
+        let mut iter = route.iter(&mut tokens);
+        assert_eq!(
+            Some(&String::from("foo")),
+            iter.next().map(|node| &node.path)
+        );
+        assert_eq!(None, iter.next());
     }
 
     #[test]
-    fn test_iter_miss() {
+    pub fn test_iter_miss() {
         let mut route = RouteTree::new();
         route
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let tokens: Vec<&str> = "foo/baz".split('/').collect();
-        let (remaining, last) = route
-            .iter(&tokens)
-            .expect("Should have been able to get iterator")
-            .last()
-            .expect("Should have found last node");
+        let mut tokens = "foo/baz".split("/");
 
-        assert_eq!(None, last.handler, "Should not have found handler");
-        assert_eq!(1, remaining, "Search should not have been exhausted");
+        let mut iter = route.iter(&mut tokens);
+        assert_eq!(
+            Some(&String::from("foo")),
+            iter.next().map(|node| &node.path)
+        );
+        assert_eq!(None, iter.next());
     }
 
     #[test]
-    fn test_iter_hit() {
+    pub fn test_iter_hit() {
         let mut route = RouteTree::new();
         route
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let tokens: Vec<&str> = "foo/bar/baz".split('/').collect();
-        let (remaining, last) = route
-            .iter(&tokens)
-            .expect("Should have been able to get iterator")
-            .last()
-            .expect("Should have found last node");
+        let mut tokens = "foo/bar/baz".split("/");
 
+        let mut iter = route.iter(&mut tokens);
+        assert_eq!(
+            Some(&String::from("foo")),
+            iter.next().map(|node| &node.path)
+        );
+        assert_eq!(
+            Some(&String::from("bar")),
+            iter.next().map(|node| &node.path)
+        );
         assert_eq!(
             Some(String::from("Baz")),
-            last.handler,
-            "Should have found handler"
+            iter.next().as_ref().and_then(|node| node.handler.clone())
         );
-        assert_eq!(0, remaining, "Search should have been exhausted");
+        assert_eq!(None, iter.next());
     }
 
     fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
