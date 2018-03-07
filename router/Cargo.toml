@@ -2,6 +2,14 @@
 name = "luminal-router"
 version = "0.0.1"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
+description = "Minimalist router for hyper.rs"
+homepage = "http://github.com/commandline/luminal/router"
+repository = "http://github.com/commandline/luminal"
+#documentation = "https://commandline.github.io/luminal/"
+readme = "README.md"
+keywords = ["web", "router"]
+categories = ["web-programming"]
+license = "Apache"
 
 [dependencies]
 error-chain = "0.11"
