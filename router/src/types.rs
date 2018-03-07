@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::str::Split;
 
 use error::*;
@@ -165,7 +165,7 @@ impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
 #[derive(Debug, PartialEq)]
 struct PathNode<T> {
     path: String,
-    next: HashMap<String, PathNode<T>>,
+    next: BTreeMap<String, PathNode<T>>,
     handler: Option<T>,
 }
 
@@ -173,7 +173,7 @@ impl<T> PathNode<T> {
     fn new(path: &str, handler: Option<T>) -> PathNode<T> {
         PathNode {
             path: path.to_owned(),
-            next: HashMap::new(),
+            next: BTreeMap::new(),
             handler,
         }
     }
