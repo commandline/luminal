@@ -27,6 +27,6 @@ components as the edges in the underlying tree.
 * [ ] Support path parameters
 * [ ] Convert message errors to explicit types.
 * [x] Add benchmarks.
-* [ ] Add iterator to RouteTree that consumes path tokens, yields None on first miss
+* [x] Add iterator to RouteTree that consumes path tokens, yields None on first miss
   * [ ] Use iterator to find last existing in add fn
   * [ ] Use iterator to find handler in dispatch so misses can short circuit faster

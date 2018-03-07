@@ -4,14 +4,14 @@ use error::*;
 
 /// Route mapping as a radix trie.
 pub struct RouteTree<T> {
-    root: PathComp<T>,
+    root: PathNode<T>,
 }
 
 impl<T> RouteTree<T> {
     /// Create a new route mapping with an index component and no handler.
     pub fn new() -> Self {
         RouteTree {
-            root: PathComp::new("", None),
+            root: PathNode::new("", None),
         }
     }
 
@@ -54,7 +54,7 @@ impl<T> RouteTree<T> {
                     // components to wire together
                     } else {
                         last_existing.push(last);
-                        created.push(PathComp::new(token, None));
+                        created.push(PathNode::new(token, None));
                     }
                     created
                 });
@@ -95,8 +95,8 @@ impl<T> RouteTree<T> {
     // Consume the handler, assigning it to the terminal component of the routing path, adding any
     // new routing path components into the existing trie as needed
     fn wire_handler(
-        last_existing: &mut Vec<&mut PathComp<T>>,
-        created: &mut Vec<PathComp<T>>,
+        last_existing: &mut Vec<&mut PathNode<T>>,
+        created: &mut Vec<PathNode<T>>,
         route: &str,
         handler: T,
     ) -> Result<()> {
@@ -128,6 +128,48 @@ impl<T> RouteTree<T> {
 
         Ok(())
     }
+
+    pub fn iter<'a>(&'a self, path: &str) -> RouteIter<'a, T> {
+        let tokens = path.split('/').map(|token| token.to_owned()).collect();
+        RouteIter {
+            index: 0,
+            tokens,
+            previous: &self.root,
+            tree: &self,
+        }
+    }
+}
+
+// TODO introduce container type for last match with position
+struct RouteIter<'a, T: 'a> {
+    index: usize,
+    // maybe reverse into a stack?
+    tokens: Vec<String>,
+    previous: &'a PathNode<T>,
+    tree: &'a RouteTree<T>,
+}
+
+impl<'a, T> Iterator for RouteIter<'a, T> {
+    type Item = &'a PathNode<T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        // how to track first pass for "/"?
+        if self.index == 0 {
+            self.index += 1;
+            Some(&self.previous)
+        // stack is empty?
+        } else if self.index >= self.tokens.len() {
+            None
+        } else {
+            // pop the next off the stack?
+            if let Some(next) = self.previous.next.get(&self.tokens[self.index]) {
+                self.index += 1;
+                self.previous = next;
+                Some(next)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 // Not only splits an arbitrary string path, ensures that it is well formed for our purposes, that
@@ -146,15 +188,15 @@ fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
 /// Since the radix trie doesn't need to split the path components, use a hash map as an efficient
 /// to connect the nodes.
 #[derive(Debug, PartialEq)]
-struct PathComp<T> {
+struct PathNode<T> {
     path: String,
-    next: HashMap<String, PathComp<T>>,
+    next: HashMap<String, PathNode<T>>,
     handler: Option<T>,
 }
 
-impl<T> PathComp<T> {
-    fn new(path: &str, handler: Option<T>) -> PathComp<T> {
-        PathComp {
+impl<T> PathNode<T> {
+    fn new(path: &str, handler: Option<T>) -> PathNode<T> {
+        PathNode {
             path: path.to_owned(),
             next: HashMap::new(),
             handler,
@@ -169,9 +211,9 @@ mod tests {
     // Test adding a single, multiple component path
     #[test]
     pub fn test_add() {
-        let mut expected = PathComp::new("", None);
-        let mut foo = PathComp::new("foo", None);
-        let bar = PathComp::new("bar", Some(String::from("Bar")));
+        let mut expected = PathNode::new("", None);
+        let mut foo = PathNode::new("foo", None);
+        let bar = PathNode::new("bar", Some(String::from("Bar")));
         foo.next.insert(String::from("bar"), bar);
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::new();
@@ -185,7 +227,7 @@ mod tests {
     #[test]
     pub fn test_add_two() {
         let foo = sub_route2("foo", "bar", "baz");
-        let mut expected = PathComp::new("", None);
+        let mut expected = PathNode::new("", None);
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::new();
         route
@@ -199,11 +241,11 @@ mod tests {
     // Test adding two routes, one that is an extension of another
     #[test]
     pub fn test_add_extend() {
-        let mut expected = PathComp::new("", None);
-        let mut foo = PathComp::new("foo", Some(String::from("Foo")));
+        let mut expected = PathNode::new("", None);
+        let mut foo = PathNode::new("foo", Some(String::from("Foo")));
         foo.next.insert(
             String::from("bar"),
-            PathComp::new("bar", Some(String::from("Bar"))),
+            PathNode::new("bar", Some(String::from("Bar"))),
         );
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::new();
@@ -270,17 +312,32 @@ mod tests {
         assert_dispatch(&route, "/foo", "");
     }
 
-    fn sub_route2(parent: &str, first: &str, second: &str) -> PathComp<String> {
-        let mut comp = PathComp::new(parent, None);
+    fn sub_route2(parent: &str, first: &str, second: &str) -> PathNode<String> {
+        let mut comp = PathNode::new(parent, None);
         comp.next.insert(
             first.to_owned(),
-            PathComp::new(first, Some(String::from(first.to_uppercase()))),
+            PathNode::new(first, Some(String::from(first.to_uppercase()))),
         );
         comp.next.insert(
             second.to_owned(),
-            PathComp::new(second, Some(String::from(second.to_uppercase()))),
+            PathNode::new(second, Some(String::from(second.to_uppercase()))),
         );
         comp
+    }
+
+    #[test]
+    pub fn test_iter() {
+        let mut route = RouteTree::new();
+        route
+            .add("/foo/bar/baz", String::from("Bar"))
+            .expect("Should have been able to add route.");
+
+        let last = route
+            .iter("/foo/bar")
+            .last()
+            .expect("Should have found last node");
+
+        assert_eq!(None, last.handler);
     }
 
     fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
