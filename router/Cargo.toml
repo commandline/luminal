@@ -18,4 +18,4 @@ hyper = "0.11"
 
 [dev-dependencies]
 tokio-core = "0.1"
-time = "*"
+time = "0.1"
