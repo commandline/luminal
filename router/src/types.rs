@@ -4,7 +4,7 @@ use error::*;
 
 /// Route mapping as a radix trie.
 pub struct RouteTree<T> {
-    root: PathNode<T>,
+    pub root: PathNode<T>,
 }
 
 impl<T> RouteTree<T> {
@@ -70,7 +70,9 @@ impl<T> RouteTree<T> {
     /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
     /// found.
     pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<&'a Option<T>> {
-        if let Ok(iter) = self.iter(request_path) {
+        let path = request_path.trim_left_matches('/');
+        let tokens: Vec<&str> = path.split('/').collect();
+        if let Ok(iter) = self.iter(&tokens) {
             if let Some((remaining, found)) = iter.last() {
                 if 0 == remaining {
                     Some(&found.handler)
@@ -122,59 +124,37 @@ impl<T> RouteTree<T> {
         Ok(())
     }
 
-    fn iter<'a>(&'a self, path: &str) -> Result<RouteIter<'a, T>> {
-        if !path.starts_with('/') {
-            bail!("Paths must start with a slash (/)")
-        }
-        let path = path.trim_left_matches('/');
-        let tokens = path.split('/')
-            .rev()
-            .map(|token| token.to_owned())
-            .collect();
-        Ok(RouteIter {
+    pub fn iter<'a, 'b>(&'a self, tokens: &'b [&'b str]) -> Result<Iter<'a, 'b, T>> {
+        Ok(Iter {
+            index: 0,
             tokens,
-            previous: None,
-            root: &self.root,
+            previous: &self.root,
         })
     }
 }
 
-struct RouteIter<'a, T: 'a> {
-    tokens: Vec<String>,
-    previous: Option<&'a PathNode<T>>,
-    root: &'a PathNode<T>,
+pub struct Iter<'a, 'b, T: 'a> {
+    index: usize,
+    tokens: &'b [&'b str],
+    previous: &'a PathNode<T>,
 }
 
-impl<'a, T> Iterator for RouteIter<'a, T> {
+impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
     type Item = (usize, &'a PathNode<T>);
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(previous) = self.previous {
-            if let Some(token) = self.tokens.pop() {
-                if let Some(next) = previous.next.get(&token) {
-                    self.previous = Some(&next);
-                    Some((self.tokens.len(), &next))
-                } else {
-                    None
-                }
+        if self.index < self.tokens.len() {
+            let token = &self.tokens[self.index];
+            self.index += 1;
+            if let Some(next) = self.previous.next.get(*token) {
+                self.previous = next;
+                Some((self.tokens.len() - self.index, &next))
             } else {
                 None
             }
         } else {
-            self.previous = Some(&self.root);
-            Some((self.tokens.len(), &self.root))
+            None
         }
     }
-}
-
-// Not only splits an arbitrary string path, ensures that it is well formed for our purposes, that
-// means they start with a slash and if then end with a slash, we trim that terminals slash
-fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
-    let path = path.trim_right_matches('/');
-    let tokens: Vec<&str> = path.split('/').collect();
-    if tokens[0] != "" {
-        bail!("Paths must start with a slash (/)")
-    }
-    Ok(tokens)
 }
 
 /// Node in the internal routing trie.
@@ -182,7 +162,7 @@ fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
 /// Since the radix trie doesn't need to split the path components, use a hash map as an efficient
 /// to connect the nodes.
 #[derive(Debug, PartialEq)]
-struct PathNode<T> {
+pub struct PathNode<T> {
     path: String,
     next: HashMap<String, PathNode<T>>,
     handler: Option<T>,
@@ -196,6 +176,17 @@ impl<T> PathNode<T> {
             handler,
         }
     }
+}
+
+// Not only splits an arbitrary string path, ensures that it is well formed for our purposes, that
+// means they start with a slash and if then end with a slash, we trim that terminals slash
+fn path_to_tokens(path: &str) -> Result<Vec<&str>> {
+    let path = path.trim_right_matches('/');
+    let tokens: Vec<&str> = path.split('/').collect();
+    if tokens[0] != "" {
+        bail!("Paths must start with a slash (/)")
+    }
+    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -326,8 +317,9 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
+        let tokens: Vec<&str> = "foo".split('/').collect();
         let (remaining, last) = route
-            .iter("/foo")
+            .iter(&tokens)
             .expect("Should have been able to get iterator")
             .last()
             .expect("Should have found last node");
@@ -343,8 +335,9 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
+        let tokens: Vec<&str> = "foo/baz".split('/').collect();
         let (remaining, last) = route
-            .iter("/foo/baz")
+            .iter(&tokens)
             .expect("Should have been able to get iterator")
             .last()
             .expect("Should have found last node");
@@ -360,8 +353,9 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
+        let tokens: Vec<&str> = "foo/bar/baz".split('/').collect();
         let (remaining, last) = route
-            .iter("/foo/bar/baz")
+            .iter(&tokens)
             .expect("Should have been able to get iterator")
             .last()
             .expect("Should have found last node");

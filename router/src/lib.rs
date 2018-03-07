@@ -23,7 +23,7 @@ type LuminalService =
 
 /// Router for Hyper.
 pub struct Router {
-    routes: HashMap<Method, RouteTree<Box<LuminalService>>>,
+    pub routes: HashMap<Method, RouteTree<Box<LuminalService>>>,
 }
 
 impl Service for Router {
