@@ -70,20 +70,13 @@ impl<T> RouteTree<T> {
     /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
     /// found.
     pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<&'a Option<T>> {
-        if let Ok(tokens) = path_to_tokens(request_path) {
-            let comp = tokens
-            .iter()
-            // start with the first non-root component of the route
-            .skip(1)
-            .fold(Some(&self.root), |comp, token| {
-                if let Some(comp) = comp {
-                    comp.next.get(*token)
+        if let Ok(iter) = self.iter(request_path) {
+            if let Some((remaining, found)) = iter.last() {
+                if 0 == remaining {
+                    Some(&found.handler)
                 } else {
                     None
                 }
-            });
-            if let Some(comp) = comp {
-                Some(&comp.handler)
             } else {
                 None
             }
@@ -129,45 +122,46 @@ impl<T> RouteTree<T> {
         Ok(())
     }
 
-    pub fn iter<'a>(&'a self, path: &str) -> RouteIter<'a, T> {
-        let tokens = path.split('/').map(|token| token.to_owned()).collect();
-        RouteIter {
-            index: 0,
-            tokens,
-            previous: &self.root,
-            tree: &self,
+    fn iter<'a>(&'a self, path: &str) -> Result<RouteIter<'a, T>> {
+        if !path.starts_with('/') {
+            bail!("Paths must start with a slash (/)")
         }
+        let path = path.trim_left_matches('/');
+        let tokens = path.split('/')
+            .rev()
+            .map(|token| token.to_owned())
+            .collect();
+        Ok(RouteIter {
+            tokens,
+            previous: None,
+            root: &self.root,
+        })
     }
 }
 
-// TODO introduce container type for last match with position
 struct RouteIter<'a, T: 'a> {
-    index: usize,
-    // maybe reverse into a stack?
     tokens: Vec<String>,
-    previous: &'a PathNode<T>,
-    tree: &'a RouteTree<T>,
+    previous: Option<&'a PathNode<T>>,
+    root: &'a PathNode<T>,
 }
 
 impl<'a, T> Iterator for RouteIter<'a, T> {
-    type Item = &'a PathNode<T>;
+    type Item = (usize, &'a PathNode<T>);
     fn next(&mut self) -> Option<Self::Item> {
-        // how to track first pass for "/"?
-        if self.index == 0 {
-            self.index += 1;
-            Some(&self.previous)
-        // stack is empty?
-        } else if self.index >= self.tokens.len() {
-            None
-        } else {
-            // pop the next off the stack?
-            if let Some(next) = self.previous.next.get(&self.tokens[self.index]) {
-                self.index += 1;
-                self.previous = next;
-                Some(next)
+        if let Some(previous) = self.previous {
+            if let Some(token) = self.tokens.pop() {
+                if let Some(next) = previous.next.get(&token) {
+                    self.previous = Some(&next);
+                    Some((self.tokens.len(), &next))
+                } else {
+                    None
+                }
             } else {
                 None
             }
+        } else {
+            self.previous = Some(&self.root);
+            Some((self.tokens.len(), &self.root))
         }
     }
 }
@@ -326,18 +320,58 @@ mod tests {
     }
 
     #[test]
-    pub fn test_iter() {
+    pub fn test_iter_partial() {
         let mut route = RouteTree::new();
         route
-            .add("/foo/bar/baz", String::from("Bar"))
+            .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let last = route
-            .iter("/foo/bar")
+        let (remaining, last) = route
+            .iter("/foo")
+            .expect("Should have been able to get iterator")
             .last()
             .expect("Should have found last node");
 
-        assert_eq!(None, last.handler);
+        assert_eq!(None, last.handler, "Should not have found handler");
+        assert_eq!(0, remaining, "Search should have been exhausted");
+    }
+
+    #[test]
+    fn test_iter_miss() {
+        let mut route = RouteTree::new();
+        route
+            .add("/foo/bar/baz", String::from("Baz"))
+            .expect("Should have been able to add route.");
+
+        let (remaining, last) = route
+            .iter("/foo/baz")
+            .expect("Should have been able to get iterator")
+            .last()
+            .expect("Should have found last node");
+
+        assert_eq!(None, last.handler, "Should not have found handler");
+        assert_eq!(1, remaining, "Search should not have been exhausted");
+    }
+
+    #[test]
+    fn test_iter_hit() {
+        let mut route = RouteTree::new();
+        route
+            .add("/foo/bar/baz", String::from("Baz"))
+            .expect("Should have been able to add route.");
+
+        let (remaining, last) = route
+            .iter("/foo/bar/baz")
+            .expect("Should have been able to get iterator")
+            .last()
+            .expect("Should have found last node");
+
+        assert_eq!(
+            Some(String::from("Baz")),
+            last.handler,
+            "Should have found handler"
+        );
+        assert_eq!(0, remaining, "Search should have been exhausted");
     }
 
     fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
