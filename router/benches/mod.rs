@@ -2,6 +2,7 @@
 extern crate futures;
 extern crate hyper;
 extern crate test;
+extern crate time;
 
 extern crate luminal_router;
 
@@ -10,6 +11,7 @@ use hyper::header::ContentLength;
 use hyper::Method;
 use hyper::server::{self, Request, Response};
 use test::Bencher;
+use time::PreciseTime;
 
 use luminal_router::{Router, ServiceFuture};
 
@@ -82,6 +84,26 @@ fn immediate_miss_deep(bencher: &mut Bencher) {
     }
 
     bencher.iter(|| router.dispatch(&Method::Get, &to_find));
+}
+
+#[bench]
+fn dispatch_ms(_: &mut Bencher) {
+    let router = permute_map(5, 100);
+
+    let mut to_find = String::from("/");
+    for x in 0..100 {
+        to_find += &format!("{}/", x);
+    }
+
+    let n = 1_000_000;
+    let start = PreciseTime::now();
+    for _ in 0..n {
+        router.dispatch(&Method::Get, &to_find);
+    }
+    let end = PreciseTime::now();
+    let runtime = start.to(end).num_milliseconds() as f64;
+    println!("Took {:.2} MS to run.", runtime);
+    println!("{:.2} dispatches per MS", n as f64 / runtime);
 }
 
 fn permute_map(breadth: usize, depth: usize) -> Router {
