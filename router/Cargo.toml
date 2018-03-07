@@ -9,7 +9,7 @@ repository = "http://github.com/commandline/luminal"
 readme = "README.md"
 keywords = ["web", "router"]
 categories = ["web-programming"]
-license = "Apache"
+license = "Apache-2.0"
 
 [dependencies]
 error-chain = "0.11"
