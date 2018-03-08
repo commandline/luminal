@@ -24,7 +24,9 @@ components as the edges in the underlying tree.
 
 ## TODO
 
-* [ ] Support path parameters
+* [x] Support path parameters
 * [ ] Convert message errors to explicit types.
 * [x] Add benchmarks.
 * [x] Add iterator to RouteTree that consumes path tokens, yields None on first miss
+* [ ] Add examples to docs
+* [ ] Add examples to example crate

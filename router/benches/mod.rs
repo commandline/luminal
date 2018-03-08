@@ -26,7 +26,9 @@ fn noop_handler(_req: Request) -> ServiceFuture {
 
 #[bench]
 fn bench_empty(bencher: &mut Bencher) {
-    let router = Router::new();
+    let router = Router {
+        ..Default::default()
+    };
 
     bencher.iter(|| router.dispatch(&Method::Get, "/"));
 }
@@ -63,12 +65,44 @@ fn bench_deep(bencher: &mut Bencher) {
 }
 
 #[bench]
+fn bench_deep_path(bencher: &mut Bencher) {
+    let router = permute_map_path(5, 10);
+
+    let mut to_find = String::from("/");
+    for x in 0..10 {
+        if x % 3 == 0 {
+            to_find += &format!(":{}/", x);
+        } else {
+            to_find += &format!("{}/", x);
+        }
+    }
+
+    bencher.iter(|| router.dispatch(&Method::Get, &to_find));
+}
+
+#[bench]
 fn bench_deeper(bencher: &mut Bencher) {
     let router = permute_map(5, 100);
 
     let mut to_find = String::from("/");
     for x in 0..100 {
         to_find += &format!("{}/", x);
+    }
+
+    bencher.iter(|| router.dispatch(&Method::Get, &to_find));
+}
+
+#[bench]
+fn bench_deeper_path(bencher: &mut Bencher) {
+    let router = permute_map_path(5, 100);
+
+    let mut to_find = String::from("/");
+    for x in 0..10 {
+        if x % 3 == 0 {
+            to_find += &format!(":{}/", x);
+        } else {
+            to_find += &format!("{}/", x);
+        }
     }
 
     bencher.iter(|| router.dispatch(&Method::Get, &to_find));
@@ -103,11 +137,13 @@ fn dispatch_ms(_: &mut Bencher) {
     let end = PreciseTime::now();
     let runtime = start.to(end).num_milliseconds() as f64;
     println!("Took {:.2} MS to run.", runtime);
-    println!("{:.2} dispatches per MS", n as f64 / runtime);
+    println!("{:.2} dispatches per MS", f64::from(n) / runtime);
 }
 
 fn permute_map(breadth: usize, depth: usize) -> Router {
-    let mut router = Router::new();
+    let mut router = Router {
+        ..Default::default()
+    };
     let mut path_prefix = String::from("/");
     for d in 0..depth {
         for path in 0..breadth {
@@ -117,6 +153,34 @@ fn permute_map(breadth: usize, depth: usize) -> Router {
                     server::service_fn(noop_handler),
                 )
                 .expect("Failed to add route");
+        }
+        path_prefix += &format!("{}/", d);
+    }
+    router
+}
+
+fn permute_map_path(breadth: usize, depth: usize) -> Router {
+    let mut router = Router {
+        ..Default::default()
+    };
+    let mut path_prefix = String::from("/");
+    for d in 0..depth {
+        for path in 0..breadth {
+            if path % 3 == 0 {
+                router = router
+                    .get(
+                        &format!("{}:{}", path_prefix, path),
+                        server::service_fn(noop_handler),
+                    )
+                    .expect("Failed to add route");
+            } else {
+                router = router
+                    .get(
+                        &format!("{}{}", path_prefix, path),
+                        server::service_fn(noop_handler),
+                    )
+                    .expect("Failed to add route");
+            }
         }
         path_prefix += &format!("{}/", d);
     }

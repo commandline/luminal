@@ -22,6 +22,7 @@ type LuminalService =
     Service<Request = Request, Response = Response, Error = hyper::Error, Future = ServiceFuture>;
 
 /// Router for Hyper.
+#[derive(Default)]
 pub struct Router {
     pub routes: HashMap<Method, RouteTree<Box<LuminalService>>>,
 }
@@ -45,12 +46,6 @@ impl Service for Router {
 }
 
 impl Router {
-    pub fn new() -> Self {
-        Router {
-            routes: HashMap::new(),
-        }
-    }
-
     /// Add a handler for `Method::Get` at the specified route.
     pub fn get<
         H: Service<
@@ -101,7 +96,9 @@ impl Router {
         handler: H,
     ) -> Result<Self> {
         {
-            let routing = self.routes.entry(method).or_insert(RouteTree::new());
+            let routing = self.routes
+                .entry(method)
+                .or_insert_with(RouteTree::empty_root);
             routing.add(route, Box::new(handler))?;
         }
         Ok(self)
