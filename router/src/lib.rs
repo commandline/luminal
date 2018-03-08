@@ -46,6 +46,12 @@ impl Service for Router {
 }
 
 impl Router {
+    pub fn new() -> Self {
+        Router {
+            ..Default::default()
+        }
+    }
+
     /// Add a handler for `Method::Get` at the specified route.
     pub fn get<
         H: Service<
@@ -178,7 +184,9 @@ mod tests {
 
     #[test]
     fn test_not_found() {
-        let router = Router::new();
+        let router = Router {
+            ..Default::default()
+        };
 
         let uri = "/foo"
             .parse()
