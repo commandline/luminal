@@ -96,7 +96,7 @@ impl<T> RouteTree<T> {
         if path == "" {
             return Some(&self.root.handler);
         }
-        let mut tokens = path.split("/");
+        let mut tokens = path.split('/');
         let iter = self.iter(&mut tokens);
         if let Some(found) = iter.last() {
             Some(&found.handler)
@@ -152,7 +152,7 @@ impl<T> RouteTree<T> {
         Ok(())
     }
 
-    fn iter<'a, 'b>(&'a self, tokens: &'b mut Split<'b, &'b str>) -> Iter<'a, 'b, T> {
+    fn iter<'a, 'b>(&'a self, tokens: &'b mut Split<'b, char>) -> Iter<'a, 'b, T> {
         Iter {
             tokens,
             previous: &self.root,
@@ -161,7 +161,7 @@ impl<T> RouteTree<T> {
 }
 
 struct Iter<'a, 'b, T: 'a> {
-    tokens: &'b mut Split<'b, &'b str>,
+    tokens: &'b mut Split<'b, char>,
     previous: &'a PathNode<T>,
 }
 
@@ -374,7 +374,7 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let mut tokens = "foo".split("/");
+        let mut tokens = "foo".split('/');
 
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
@@ -391,7 +391,7 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let mut tokens = "foo/baz".split("/");
+        let mut tokens = "foo/baz".split('/');
 
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
@@ -408,7 +408,7 @@ mod tests {
             .add("/foo/bar/baz", String::from("Baz"))
             .expect("Should have been able to add route.");
 
-        let mut tokens = "foo/bar/baz".split("/");
+        let mut tokens = "foo/bar/baz".split('/');
 
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
@@ -433,7 +433,7 @@ mod tests {
             .add("/foo/:bar", String::from("Foo"))
             .expect("Should have been able to add route.");
 
-        let mut tokens = "foo/123".split("/");
+        let mut tokens = "foo/123".split('/');
 
         let mut iter = route.iter(&mut tokens);
         assert!(

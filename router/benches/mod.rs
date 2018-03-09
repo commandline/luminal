@@ -15,7 +15,9 @@ use time::PreciseTime;
 
 use luminal_router::{Router, ServiceFuture};
 
-fn noop_handler(_req: Request) -> ServiceFuture {
+fn noop_handler(req: Request) -> ServiceFuture {
+    // consume the request
+    ::std::mem::forget(req);
     let msg = String::from("No op");
     Box::new(future::ok(
         Response::new()
