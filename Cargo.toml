@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "router",
-    "handler"
+    "handler",
+    "pathparam"
 ]
