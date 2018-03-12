@@ -1,1 +1,1 @@
-error_chain!{}
+use hyper::{Body, StatusCode};

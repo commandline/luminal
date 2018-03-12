@@ -2,11 +2,18 @@
 name = "luminal-handler"
 version = "0.0.1"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
+description = "Slightly more convenient API on top of hyper::server::Service"
+homepage = "http://github.com/commandline/luminal/router"
+repository = "http://github.com/commandline/luminal"
+readme = "README.md"
+keywords = ["web", "handler"]
+categories = ["web-programming"]
+license = "Apache-2.0"
 
 [dependencies]
-error-chain = "0.11"
 futures = "0.1"
 hyper = "0.11"
+typemap = "0.3"
 
 [dev-dependencies]
 tokio-core = "0.1"
