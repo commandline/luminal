@@ -1,0 +1,16 @@
+[package]
+name = "luminal-pathparam"
+version = "0.0.1"
+authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
+description = "Parse route parameters for a request path."
+homepage = "http://github.com/commandline/luminal/router"
+repository = "http://github.com/commandline/luminal"
+readme = "README.md"
+keywords = ["web", "handler"]
+categories = ["web-programming"]
+license = "Apache-2.0"
+
+[dependencies]
+
+[dev-dependencies]
+url = "1.7"
