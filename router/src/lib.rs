@@ -1,3 +1,7 @@
+//! Router for mapping `hyper::Method` and a request path to a `hyper::Service`.
+//!
+//! luminal's router uses a simplified radix tree for speedy lookups. `cargo +nightly bench` to see
+//! relative performance across some contrived examples.
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
@@ -116,7 +120,11 @@ impl Router {
         route_path: &str,
     ) -> Option<&'a Option<Box<LuminalService>>> {
         if let Some(routing) = self.routes.get(method) {
-            routing.dispatch(route_path)
+            if let Some((_, handler)) = routing.dispatch(route_path) {
+                Some(handler)
+            } else {
+                None
+            }
         } else {
             None
         }

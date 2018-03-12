@@ -11,16 +11,16 @@ pub struct RouteTree<T> {
 }
 
 impl<T> RouteTree<T> {
-    /// Create a new route mapping with an index component and no handler.
+    /// Create a new route mapping with an index node with no handler.
     pub fn empty_root() -> Self {
         RouteTree {
-            root: PathNode::new("", None),
+            root: PathNode::new("/", "", None),
         }
     }
 
     /// Add the specified handler at the given route.
     ///
-    /// This method will update the internal trie used to store searchable routes. It will append
+    /// This method will update the internal tree used to store searchable routes. It will append
     /// any unknown path components in the route and assign the handler to the new, full route.
     pub fn add(&mut self, route: &str, handler: T) -> Result<&mut Self> {
         let path = route.trim_right_matches('/');
@@ -43,6 +43,8 @@ impl<T> RouteTree<T> {
             let mut last_existing = vec![];
             last_existing.push(&mut self.root);
 
+            let mut path = String::new();
+
             // unlike dispatch, adding a route needs a mutable reference to the last match in the
             // existing tree; implementing a mutable iterator is non-trivial and isn't warranted
             // here since adding routes is likely to not be anywhere as performance sensitive as
@@ -52,6 +54,7 @@ impl<T> RouteTree<T> {
                 // start with the first non-root component of the route
                 .skip(1)
                 .fold(Vec::new(), |mut created, token| {
+                    path.push_str(&format!("/{}", token));
                     let last = last_existing.pop().expect("Should always have a last component");
                     if token.starts_with(':') {
                         // this is a guard because if it was an if..else then the borrow from
@@ -59,7 +62,7 @@ impl<T> RouteTree<T> {
                         // one where the dereferenced option contains Some
                         if last.params.deref_mut().is_none() {
                             last_existing.push(last);
-                            created.push(PathNode::new("*", None));
+                            created.push(PathNode::new(&path, "*", None));
                             return created;
                         }
                         let next = last.params.deref_mut().as_mut().unwrap();
@@ -76,7 +79,7 @@ impl<T> RouteTree<T> {
                     // components to wire together
                     } else {
                         last_existing.push(last);
-                        created.push(PathNode::new(token, None));
+                        created.push(PathNode::new(&path, token, None));
                     }
                     created
                 });
@@ -89,17 +92,19 @@ impl<T> RouteTree<T> {
 
     /// Find the handler for the specific route.
     ///
-    /// Traverses the routing trie to find the matching handler, if any, returning `Err` if none is
-    /// found.
-    pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<&'a Option<T>> {
+    /// Traverses the routing tree to find the matching handler. The outer `Option` is `None` if
+    /// thethe requested path is not found at all. The inner `Option` reference will be None if the
+    /// route is found but no handler is assigned. The handler will not be assigned in the
+    /// requested path is only a partial match for a longer path added to the route tree.
+    pub fn dispatch<'a>(&'a self, request_path: &str) -> Option<(&'a str, &'a Option<T>)> {
         let path = request_path.trim_left_matches('/');
         if path == "" {
-            return Some(&self.root.handler);
+            return Some((&self.root.path, &self.root.handler));
         }
         let mut tokens = path.split('/');
         let iter = self.iter(&mut tokens);
         if let Some(found) = iter.last() {
-            Some(&found.handler)
+            Some((&found.path, &found.handler))
         } else {
             None
         }
@@ -126,19 +131,19 @@ impl<T> RouteTree<T> {
                 created.push(last);
             }
             while !created.is_empty() {
-                let comp = created.pop();
-                if let Some(comp) = comp {
+                let node = created.pop();
+                if let Some(node) = node {
                     if let Some(last) = created.last_mut() {
-                        if comp.path == "*" {
-                            last.params = Box::new(Some(comp));
+                        if node.segment == "*" {
+                            last.params = Box::new(Some(node));
                         } else {
-                            last.next.insert(comp.path.clone(), comp);
+                            last.next.insert(node.segment.clone(), node);
                         }
                     } else if let Some(last) = last_existing.pop() {
-                        if comp.path == "*" {
-                            last.params = Box::new(Some(comp));
+                        if node.segment == "*" {
+                            last.params = Box::new(Some(node));
                         } else {
-                            last.next.insert(comp.path.clone(), comp);
+                            last.next.insert(node.segment.clone(), node);
                         }
                     } else {
                         bail!("Could not fully wire up route {}", route);
@@ -160,11 +165,15 @@ impl<T> RouteTree<T> {
     }
 }
 
+// An internal struct used for fast traversal during dispatching.
 struct Iter<'a, 'b, T: 'a> {
+    // Working directly with the `Split` is more efficient than collecting it into a `Vec`, based
+    // on benchmarking both approaches.
     tokens: &'b mut Split<'b, char>,
     previous: &'a PathNode<T>,
 }
 
+// An impl that uses references to traversal the routing tree as fast and as cheaply as possible.
 impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
     type Item = &'a PathNode<T>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -184,22 +193,33 @@ impl<'a, 'b, T> Iterator for Iter<'a, 'b, T> {
     }
 }
 
-/// Node in the internal routing trie.
-///
-/// Since the radix trie doesn't need to split the path components, use a hash map as an efficient
-/// to connect the nodes.
+// Node in the internal routing tree.
+//
+// Since the radix tree doesn't need to split the path components, use a hash map as an efficient
+// to connect the nodes. The params field handles path parameter links, allowing one handler for
+// routes ending with a parameter and more routes to be added with additional path parameters
+// beyond this node.
 #[derive(Debug, PartialEq)]
 struct PathNode<T> {
+    // The path as originally mapped, will include the names of any path parameters.
     path: String,
+    // The specific segment within the original path for this node, will be "*" for a path
+    // parameter as a convenience.
+    segment: String,
+    // Edges will be any path segments after this one.
     next: BTreeMap<String, PathNode<T>>,
+    // A node representing a handler for a path parameter may also have connected edges to further
+    // nodes.
     params: Box<Option<PathNode<T>>>,
+    // An optional handler.
     handler: Option<T>,
 }
 
 impl<T> PathNode<T> {
-    fn new(path: &str, handler: Option<T>) -> PathNode<T> {
+    fn new(path: &str, segment: &str, handler: Option<T>) -> PathNode<T> {
         PathNode {
             path: path.to_owned(),
+            segment: segment.to_owned(),
             next: BTreeMap::new(),
             params: Box::new(None),
             handler,
@@ -244,9 +264,9 @@ mod tests {
     // Test adding a single, multiple component path
     #[test]
     pub fn test_add() {
-        let mut expected = PathNode::new("", None);
-        let mut foo = PathNode::new("foo", None);
-        let bar = PathNode::new("bar", Some(String::from("Bar")));
+        let mut expected = PathNode::new("/", "", None);
+        let mut foo = PathNode::new("/foo", "foo", None);
+        let bar = PathNode::new("/foo/bar", "bar", Some(String::from("Bar")));
         foo.next.insert(String::from("bar"), bar);
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::empty_root();
@@ -260,7 +280,7 @@ mod tests {
     #[test]
     pub fn test_add_two() {
         let foo = sub_route2("foo", "bar", "baz");
-        let mut expected = PathNode::new("", None);
+        let mut expected = PathNode::new("/", "", None);
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::empty_root();
         route
@@ -274,11 +294,11 @@ mod tests {
     // Test adding two routes, one that is an extension of another
     #[test]
     pub fn test_add_extend() {
-        let mut expected = PathNode::new("", None);
-        let mut foo = PathNode::new("foo", Some(String::from("Foo")));
+        let mut expected = PathNode::new("/", "", None);
+        let mut foo = PathNode::new("/foo", "foo", Some(String::from("Foo")));
         foo.next.insert(
             String::from("bar"),
-            PathNode::new("bar", Some(String::from("Bar"))),
+            PathNode::new("/foo/bar", "bar", Some(String::from("Bar"))),
         );
         expected.next.insert(String::from("foo"), foo);
         let mut route = RouteTree::empty_root();
@@ -301,7 +321,7 @@ mod tests {
         assert_dispatch(&route, "/foo/bar", "Bar");
     }
 
-    // Test that we can find an added path with a more complex routing trie
+    // Test that we can find an added path with a more complex routing tree
     #[test]
     pub fn test_dispatch_two() {
         let mut route = RouteTree::empty_root();
@@ -315,7 +335,7 @@ mod tests {
         assert_dispatch(&route, "/foo/baz", "Baz");
     }
 
-    // Test that we can find an added path with a more complex routing trie
+    // Test that we can find an added path with a more complex routing tree
     #[test]
     pub fn test_dispatch_complex() {
         let mut route = RouteTree::empty_root();
@@ -345,6 +365,7 @@ mod tests {
         assert_dispatch(&route, "/qux/quux/quuux/quuuux/quuuuux", "LongPath");
     }
 
+    // Test the expected outcome of a partial routing match.
     #[test]
     pub fn test_partial() {
         let mut route = RouteTree::empty_root();
@@ -354,19 +375,7 @@ mod tests {
         assert_dispatch(&route, "/foo", "");
     }
 
-    fn sub_route2(parent: &str, first: &str, second: &str) -> PathNode<String> {
-        let mut comp = PathNode::new(parent, None);
-        comp.next.insert(
-            first.to_owned(),
-            PathNode::new(first, Some(String::from(first.to_uppercase()))),
-        );
-        comp.next.insert(
-            second.to_owned(),
-            PathNode::new(second, Some(String::from(second.to_uppercase()))),
-        );
-        comp
-    }
-
+    // Test iterating partially into the tree.
     #[test]
     pub fn test_iter_partial() {
         let mut route = RouteTree::empty_root();
@@ -379,11 +388,12 @@ mod tests {
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
             Some(&String::from("foo")),
-            iter.next().map(|node| &node.path)
+            iter.next().map(|node| &node.segment)
         );
         assert_eq!(None, iter.next());
     }
 
+    // Test iterating with a requested path that misses.
     #[test]
     pub fn test_iter_miss() {
         let mut route = RouteTree::empty_root();
@@ -396,11 +406,12 @@ mod tests {
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
             Some(&String::from("foo")),
-            iter.next().map(|node| &node.path)
+            iter.next().map(|node| &node.segment)
         );
         assert_eq!(None, iter.next());
     }
 
+    // Test iterating a requested path that is in the tree.
     #[test]
     pub fn test_iter_hit() {
         let mut route = RouteTree::empty_root();
@@ -413,11 +424,11 @@ mod tests {
         let mut iter = route.iter(&mut tokens);
         assert_eq!(
             Some(&String::from("foo")),
-            iter.next().map(|node| &node.path)
+            iter.next().map(|node| &node.segment)
         );
         assert_eq!(
             Some(&String::from("bar")),
-            iter.next().map(|node| &node.path)
+            iter.next().map(|node| &node.segment)
         );
         assert_eq!(
             Some(String::from("Baz")),
@@ -426,6 +437,7 @@ mod tests {
         assert_eq!(None, iter.next());
     }
 
+    // Test iterating with a path parameter.
     #[test]
     pub fn test_iter_path() {
         let mut route = RouteTree::empty_root();
@@ -446,9 +458,30 @@ mod tests {
         );
     }
 
+    fn sub_route2(parent: &str, first: &str, second: &str) -> PathNode<String> {
+        let mut node = PathNode::new(&format!("/{}", parent), parent, None);
+        node.next.insert(
+            first.to_owned(),
+            PathNode::new(
+                &format!("/{}/{}", parent, first),
+                first,
+                Some(String::from(first.to_uppercase())),
+            ),
+        );
+        node.next.insert(
+            second.to_owned(),
+            PathNode::new(
+                &format!("/{}/{}", parent, second),
+                second,
+                Some(String::from(second.to_uppercase())),
+            ),
+        );
+        node
+    }
+
     fn assert_dispatch(route: &RouteTree<String>, route_path: &str, handler: &str) {
         let found = route.dispatch(route_path);
-        if let Some(found) = found {
+        if let Some((_, found)) = found {
             assert_eq!(
                 if handler.is_empty() {
                     None
