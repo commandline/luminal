@@ -1,4 +1,5 @@
 #![feature(test)]
+#![allow(dead_code)]
 extern crate test;
 extern crate url;
 
@@ -8,8 +9,6 @@ use url::form_urlencoded;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::iter::Zip;
-use std::str::Split;
 use test::Bencher;
 
 use luminal_pathparam::Parse;
@@ -53,9 +52,9 @@ fn bench_raw(bencher: &mut Bencher) {
 }
 
 #[bench]
-fn test_into_some(bencher: &mut Bencher) {
+fn test_from_some(bencher: &mut Bencher) {
     bencher.iter(|| {
-        let _test: TestStruct = luminal_pathparam::into(
+        let _test: TestStruct = luminal_pathparam::from(
             "/company/:company/dept/:dept/user/:user",
             "/company/123/dept/456/user/789",
         );
@@ -63,9 +62,9 @@ fn test_into_some(bencher: &mut Bencher) {
 }
 
 #[bench]
-fn test_into_owned_some(bencher: &mut Bencher) {
+fn test_from_owned_some(bencher: &mut Bencher) {
     bencher.iter(|| {
-        let _test: TestStructOwned = luminal_pathparam::into(
+        let _test: TestStructOwned = luminal_pathparam::from(
             "/company/:company/dept/:dept/user/:user",
             "/company/123/dept/456/user/789",
         );
@@ -73,9 +72,9 @@ fn test_into_owned_some(bencher: &mut Bencher) {
 }
 
 #[bench]
-fn test_into_many(bencher: &mut Bencher) {
+fn test_from_many(bencher: &mut Bencher) {
     bencher.iter(|| {
-        let _test: TestStruct = luminal_pathparam::into(
+        let _test: TestStruct = luminal_pathparam::from(
             "/company/:company/dept/:dept/user/:user/company/:company2/dept/:dept2/user2/:user",
             "/company/123/dept/456/user/789/company2/123/dept2/456/user2/789",
         );
@@ -86,15 +85,15 @@ fn test_into_many(bencher: &mut Bencher) {
 fn test_form_many(bencher: &mut Bencher) {
     bencher.iter(|| {
         let _params: HashMap<Cow<str>, Cow<str>> = form_urlencoded::parse(
-            "company=123&dept=456&user=789&company2=123&dept2=456&user2=789".as_bytes(),
+            b"company=123&dept=456&user=789&company2=123&dept2=456&user2=789",
         ).collect();
     });
 }
 
 #[bench]
-fn test_into_owned_many(bencher: &mut Bencher) {
+fn test_from_owned_many(bencher: &mut Bencher) {
     bencher.iter(|| {
-        let _test: TestStructOwned = luminal_pathparam::into(
+        let _test: TestStructOwned = luminal_pathparam::from(
             "/company/:company/dept/:dept/user/:user/company/:company2/dept/:dept2/user2/:user",
             "/company/123/dept/456/user/789/company2/123/dept2/456/user2/789",
         );

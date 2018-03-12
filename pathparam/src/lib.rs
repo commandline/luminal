@@ -70,7 +70,7 @@ pub mod tests {
 
     #[test]
     fn test_into() {
-        let test: TestStruct = into(
+        let test: TestStruct = from(
             "/company/:company/dept/:dept/user/:user",
             "/company/123/dept/456/user/789",
         );
