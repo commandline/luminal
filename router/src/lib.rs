@@ -8,7 +8,8 @@ extern crate futures;
 extern crate hyper;
 
 mod error;
-mod types;
+mod route;
+mod tree;
 
 use futures::future::{self, Future};
 use hyper::{Method, StatusCode};
@@ -17,7 +18,8 @@ use hyper::server::{Request, Response, Service};
 use std::collections::HashMap;
 
 use error::*;
-use self::types::RouteTree;
+use self::tree::RouteTree;
+use self::route::Route;
 
 /// Convenience, especially for `hyper::service::service_fn`.
 pub type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
@@ -28,7 +30,7 @@ type LuminalService =
 /// Router for Hyper.
 #[derive(Default)]
 pub struct Router {
-    pub routes: HashMap<Method, RouteTree<Box<LuminalService>>>,
+    pub routes: HashMap<Method, RouteTree<Route>>,
 }
 
 impl Service for Router {
@@ -38,9 +40,9 @@ impl Service for Router {
     type Future = ServiceFuture;
 
     fn call(&self, req: Request) -> Self::Future {
-        let handler = self.dispatch(req.method(), req.path());
-        if let Some(&Some(ref handler)) = handler {
-            handler.call(req)
+        let route = self.dispatch(req.method(), req.path());
+        if let Some(&Some(ref route)) = route {
+            route.service.call(req)
         } else {
             let mut response = Response::new();
             response.set_status(StatusCode::NotFound);
@@ -58,7 +60,7 @@ impl Router {
 
     /// Add a handler for `Method::Get` at the specified route.
     pub fn get<
-        H: Service<
+        S: Service<
             Request = Request,
             Response = Response,
             Error = hyper::Error,
@@ -68,14 +70,14 @@ impl Router {
     >(
         self,
         route: &str,
-        handler: H,
+        service: S,
     ) -> Result<Self> {
-        self.add(Method::Get, route, handler)
+        self.add(Method::Get, route, service)
     }
 
     /// Add a handler for `Method::Post` at the specified route.
     pub fn post<
-        H: Service<
+        S: Service<
             Request = Request,
             Response = Response,
             Error = hyper::Error,
@@ -85,14 +87,14 @@ impl Router {
     >(
         self,
         route: &str,
-        handler: H,
+        service: S,
     ) -> Result<Self> {
-        self.add(Method::Post, route, handler)
+        self.add(Method::Post, route, service)
     }
 
     /// Add a handler at the specific route path for the given `Method`.
     pub fn add<
-        H: Service<
+        S: Service<
             Request = Request,
             Response = Response,
             Error = hyper::Error,
@@ -103,25 +105,21 @@ impl Router {
         mut self,
         method: Method,
         route: &str,
-        handler: H,
+        service: S,
     ) -> Result<Self> {
         {
             let routing = self.routes
                 .entry(method)
                 .or_insert_with(RouteTree::empty_root);
-            routing.add(route, Box::new(handler))?;
+            routing.add(route, Route::new(route, service))?;
         }
         Ok(self)
     }
 
-    pub fn dispatch<'a>(
-        &'a self,
-        method: &Method,
-        route_path: &str,
-    ) -> Option<&'a Option<Box<LuminalService>>> {
+    pub fn dispatch<'a>(&'a self, method: &Method, route_path: &str) -> Option<&'a Option<Route>> {
         if let Some(routing) = self.routes.get(method) {
-            if let Some((_, handler)) = routing.dispatch(route_path) {
-                Some(handler)
+            if let Some(route) = routing.dispatch(route_path) {
+                Some(route)
             } else {
                 None
             }
