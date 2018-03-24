@@ -17,4 +17,4 @@ typemap = "0.3"
 
 [dev-dependencies]
 tokio-core = "0.1"
-luminal-router = { path = "../router" }
+luminal-router = "0.0"
