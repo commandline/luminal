@@ -150,10 +150,7 @@ fn permute_map(breadth: usize, depth: usize) -> Router {
     for d in 0..depth {
         for path in 0..breadth {
             router = router
-                .get(
-                    &format!("{}{}", path_prefix, path),
-                    server::service_fn(noop_handler),
-                )
+                .get(&format!("{}{}", path_prefix, path), noop_handler)
                 .expect("Failed to add route");
         }
         path_prefix += &format!("{}/", d);
@@ -170,17 +167,11 @@ fn permute_map_path(breadth: usize, depth: usize) -> Router {
         for path in 0..breadth {
             if path % 3 == 0 {
                 router = router
-                    .get(
-                        &format!("{}:{}", path_prefix, path),
-                        server::service_fn(noop_handler),
-                    )
+                    .get(&format!("{}:{}", path_prefix, path), noop_handler)
                     .expect("Failed to add route");
             } else {
                 router = router
-                    .get(
-                        &format!("{}{}", path_prefix, path),
-                        server::service_fn(noop_handler),
-                    )
+                    .get(&format!("{}{}", path_prefix, path), noop_handler)
                     .expect("Failed to add route");
             }
         }

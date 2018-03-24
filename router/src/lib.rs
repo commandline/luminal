@@ -13,7 +13,7 @@ mod tree;
 
 use futures::future::{self, Future};
 use hyper::{Method, StatusCode};
-use hyper::server::{Request, Response, Service};
+use hyper::server::{self, Request, Response, Service};
 
 use std::collections::HashMap;
 
@@ -51,6 +51,37 @@ impl Service for Router {
     }
 }
 
+pub trait IntoService: Send + Sync + 'static {
+    fn into_service(
+        self,
+    ) -> Box<
+        Service<
+            Request = Request,
+            Response = Response,
+            Error = hyper::Error,
+            Future = Box<Future<Item = Response, Error = hyper::Error>>,
+        >,
+    >;
+}
+
+impl<F> IntoService for F
+where
+    F: Send + Sync + 'static + Fn(Request) -> Box<Future<Item = Response, Error = hyper::Error>>,
+{
+    fn into_service(
+        self,
+    ) -> Box<
+        Service<
+            Request = Request,
+            Response = Response,
+            Error = hyper::Error,
+            Future = Box<Future<Item = Response, Error = hyper::Error>>,
+        >,
+    > {
+        Box::new(server::service_fn(self))
+    }
+}
+
 impl Router {
     pub fn new() -> Self {
         Router {
@@ -58,8 +89,8 @@ impl Router {
         }
     }
 
-    /// Add a handler for `Method::Get` at the specified route.
-    pub fn get<
+    /// Add a service for `Method::Get` at the specified route.
+    pub fn get_svc<
         S: Service<
             Request = Request,
             Response = Response,
@@ -75,8 +106,16 @@ impl Router {
         self.add(Method::Get, route, service)
     }
 
+    /// Add a `Service` for `Method::Get` at the specific route by coercing `I` into a `Service`.
+    pub fn get<I>(self, route: &str, source: I) -> Result<Self>
+    where
+        I: Send + Sync + 'static + IntoService,
+    {
+        self.add(Method::Get, route, source.into_service())
+    }
+
     /// Add a handler for `Method::Post` at the specified route.
-    pub fn post<
+    pub fn post_svc<
         S: Service<
             Request = Request,
             Response = Response,
@@ -135,7 +174,6 @@ mod tests {
 
     use hyper::Body;
     use hyper::header::ContentLength;
-    use hyper::server;
     use futures::Stream;
 
     use self::tokio_core::reactor::Core;
@@ -176,11 +214,11 @@ mod tests {
     #[test]
     fn test_router() {
         let router = Router::new()
-            .get("/foo/bar", server::service_fn(get_bar_handler))
+            .get("/foo/bar", get_bar_handler)
             .expect("Should have been able to add route")
-            .get("/foo/baz", StringHandler::new("Baz"))
+            .get_svc("/foo/baz", StringHandler::new("Baz"))
             .expect("Should have been able to add route")
-            .post("/foo/bar", StringHandler::new("Post bar"))
+            .post_svc("/foo/bar", StringHandler::new("Post bar"))
             .expect("Should have been able to add route");
 
         assert_call(&router, Method::Get, "/foo/bar", "Get bar");
