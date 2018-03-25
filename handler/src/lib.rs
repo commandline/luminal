@@ -8,11 +8,8 @@ extern crate hyper;
 extern crate typemap;
 
 use futures::future::{self, Future};
-use hyper::{Body, StatusCode};
 use hyper::server::{Request, Response, Service};
 use typemap::TypeMap;
-
-use std::marker::PhantomData;
 
 // A convenience alias.
 type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
@@ -23,36 +20,23 @@ pub enum HttpRequest {
     Context { request: Request, context: TypeMap },
 }
 
-/// Trait to implement on errors so that a caller's error type can be converted into a response.
-pub trait IntoResponse {
-    fn status(&self) -> StatusCode {
-        StatusCode::InternalServerError
-    }
-
-    fn body(&self) -> Body;
-}
-
-/// Trait for handling a request, returning a response or an error that can be converted into a
-/// `hyper::Response`.
-pub trait Handler<E: IntoResponse> {
-    fn handle(&self, req: HttpRequest) -> Result<Response, E>;
+/// Trait for handling a request, returning either a success `Response` or an error `Response`.
+pub trait Handler {
+    fn handle(&self, req: HttpRequest) -> Result<Response, Response>;
 }
 
 /// An impl of `hyper::Service` that consumes an impl of `Handler`.
-pub struct HandlerService<H, E>
-where
-    E: IntoResponse,
-    H: Handler<E>,
-{
+pub struct HandlerService<H: Handler> {
     handler: H,
-    _phantom: PhantomData<E>,
 }
 
-impl<H, E> Service for HandlerService<H, E>
-where
-    E: IntoResponse,
-    H: Handler<E>,
-{
+impl<H: Handler> HandlerService<H> {
+    pub fn new(handler: H) -> Self {
+        HandlerService { handler }
+    }
+}
+
+impl<H: Handler> Service for HandlerService<H> {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
@@ -63,62 +47,40 @@ where
         let http_request = HttpRequest::Raw(request);
         match self.handler.handle(http_request) {
             Ok(response) => Box::new(future::ok(response)),
-            Err(error) => Box::new(future::ok(
-                Response::new()
-                    .with_status(error.status())
-                    .with_body(error.body()),
-            )),
+            Err(error) => Box::new(future::ok(error)),
         }
     }
 }
 
 /// Accepts a function or closure that takes an `HttpRequest` and returns a compatible `Result`.
-pub fn handler_fn<F, E>(func: F) -> HandlerService<HandlerFn<F, E>, E>
+pub fn handler_fn<F>(func: F) -> HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, E>,
-    E: IntoResponse,
+    F: Fn(HttpRequest) -> Result<Response, Response>,
 {
-    HandlerService::new(HandlerFn { func })
+    HandlerFn { func }
 }
 
 /// Holds a function to dispatch to via its impl of `Handler<E>`.
-pub struct HandlerFn<F, E>
+pub struct HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, E>,
-    E: IntoResponse,
+    F: Fn(HttpRequest) -> Result<Response, Response>,
 {
     func: F,
 }
 
-impl<F, E> Handler<E> for HandlerFn<F, E>
+impl<F> Handler for HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, E>,
-    E: IntoResponse,
+    F: Fn(HttpRequest) -> Result<Response, Response>,
 {
-    fn handle(&self, req: HttpRequest) -> Result<Response, E> {
+    fn handle(&self, req: HttpRequest) -> Result<Response, Response> {
         (self.func)(req)
-    }
-}
-
-impl<H, E> HandlerService<H, E>
-where
-    E: IntoResponse,
-    H: Handler<E>,
-{
-    pub fn new(handler: H) -> Self {
-        HandlerService {
-            handler,
-            _phantom: PhantomData,
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate luminal_router;
     extern crate tokio_core;
 
-    use self::luminal_router::Router;
     use futures::Stream;
     use hyper::Method;
 
@@ -126,7 +88,6 @@ mod tests {
 
     use super::*;
 
-    #[derive(Clone)]
     struct TestError {
         status: StatusCode,
         body: String,
@@ -147,16 +108,24 @@ mod tests {
         Failure(TestError),
     }
 
-    impl Handler<TestError> for TestHandler {
-        fn handle(&self, _request: HttpRequest) -> Result<Response, TestError> {
+    impl Handler for TestHandler {
+        fn handle(&self, _request: HttpRequest) -> Result<Response, Response> {
             match *self {
                 TestHandler::Success(ref body) => {
                     let body: String = body.clone();
                     Ok(Response::new().with_status(StatusCode::Ok).with_body(body))
                 }
-                TestHandler::Failure(ref error) => Err(error.clone()),
+                TestHandler::Failure(ref error) => Err(Response::new()
+                    .with_status(error.status())
+                    .with_body(error.body())),
             }
         }
+    }
+
+    fn test_fn(_req: HttpRequest) -> Result<Response, Response> {
+        Ok(Response::new()
+            .with_status(StatusCode::Ok)
+            .with_body(String::from("test")))
     }
 
     #[test]
@@ -183,66 +152,21 @@ mod tests {
         );
     }
 
-    fn test_fn(_req: HttpRequest) -> Result<Response, TestError> {
-        Ok(Response::new()
-            .with_status(StatusCode::Ok)
-            .with_body(String::from("test")))
-    }
-
     #[test]
-    fn test_fn_route() {
-        let handler = TestHandler::Success(String::from("Success"));
+    fn test_handler_fn() {
+        let handler = handler_fn(test_fn);
         let service = HandlerService::new(handler);
-        let router = Router::new();
 
-        let router = router
-            .get("/foo", service)
-            .expect("Should have been able to add handler")
-            .get("/bar", handler_fn(test_fn))
-            .expect("Should have been able to add handler fn");
-
-        assert_route(&router, Method::Get, "/foo", (&StatusCode::Ok, "Success"));
-        assert_route(&router, Method::Get, "/bar", (&StatusCode::Ok, "test"));
+        assert_call(&service, Method::Get, "/foo", (&StatusCode::Ok, "test"));
     }
 
-    fn assert_route(service: &Router, method: Method, uri: &str, expected: (&StatusCode, &str)) {
-        let uri = uri.parse()
-            .expect("Should have been able to convert to uri");
-        let req: Request<Body> = Request::new(method, uri);
-
-        let work = service.call(req);
-
-        let mut core = Core::new().expect("Should have been able to create core");
-
-        let response = core.run(work)
-            .expect("Should have been able to run router call");
-
-        assert_eq!(
-            *expected.0,
-            response.status(),
-            "Should have received {} status.",
-            expected.0
-        );
-
-        let body = core.run(response.body().concat2())
-            .expect("Should have been able to resolve body concat");
-        let body: &[u8] = &body.to_vec();
-
-        assert_eq!(
-            expected.1.as_bytes(),
-            body,
-            "Should have received correct body content"
-        );
-    }
-
-    fn assert_call<H, E>(
-        service: &HandlerService<H, E>,
+    fn assert_call<H>(
+        service: &HandlerService<H>,
         method: Method,
         uri: &str,
         expected: (&StatusCode, &str),
     ) where
-        E: IntoResponse,
-        H: Handler<E>,
+        H: Handler,
     {
         let uri = uri.parse()
             .expect("Should have been able to convert to uri");
