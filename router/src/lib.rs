@@ -39,4 +39,4 @@ pub type LuminalFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
 #[cfg(not(feature = "handler"))]
 type LuminalService =
-    Service<Request = Request, Response = Response, Error = hyper::Error, Future = ServiceFuture>;
+    Service<Request = Request, Response = Response, Error = hyper::Error, Future = LuminalFuture>;

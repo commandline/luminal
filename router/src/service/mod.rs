@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 mod builder;
 
-use {LuminalService, ServiceFuture};
+use {LuminalFuture, LuminalService};
 use error::*;
 use tree::RouteTree;
 use route::Route;
@@ -26,7 +26,7 @@ impl Service for Router {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = ServiceFuture;
+    type Future = LuminalFuture;
 
     fn call(&self, req: Request) -> Self::Future {
         let route = self.dispatch(req.method(), req.path());
@@ -54,7 +54,7 @@ impl Router {
             Request = Request,
             Response = Response,
             Error = hyper::Error,
-            Future = ServiceFuture,
+            Future = LuminalFuture,
         >
             + 'static,
     >(
@@ -124,7 +124,7 @@ mod tests {
         }
     }
 
-    fn get_bar_handler(_req: Request) -> ServiceFuture {
+    fn get_bar_handler(_req: Request) -> LuminalFuture {
         let msg = String::from("Get bar");
         Box::new(future::ok(
             Response::new()

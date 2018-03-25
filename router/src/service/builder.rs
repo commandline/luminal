@@ -4,7 +4,7 @@ use hyper::server::{self, Request, Response, Service};
 
 use std::collections::HashMap;
 
-use ServiceFuture;
+use LuminalFuture;
 use error::*;
 use super::Router;
 
@@ -31,7 +31,7 @@ impl ServiceRouteBuilder {
             Request = Request,
             Response = Response,
             Error = hyper::Error,
-            Future = ServiceFuture,
+            Future = LuminalFuture,
         >
             + 'static,
     >(
@@ -51,7 +51,7 @@ impl ServiceRouteBuilder {
             Request = Request,
             Response = Response,
             Error = hyper::Error,
-            Future = ServiceFuture,
+            Future = LuminalFuture,
         >
             + 'static,
     >(
@@ -91,7 +91,7 @@ impl FnRouteBuilder {
     }
 
     /// Add a service for `Method::Get` at the specified route.
-    pub fn get<F: Fn(Request) -> ServiceFuture + 'static>(
+    pub fn get<F: Fn(Request) -> LuminalFuture + 'static>(
         mut self,
         route: &str,
         function: F,
