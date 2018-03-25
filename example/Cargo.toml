@@ -1,0 +1,13 @@
+[package]
+name = "luminal-example"
+version = "0.0.1"
+authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
+
+[dependencies]
+futures = "*"
+error-chain = "*"
+http = "*"
+hyper = { version = "*", features = ["compat"] }
+luminal-router = { version = "*", features = ["handler"], path = "../router" }
+luminal-handler = { version = "*", path = "../handler" }
+tokio-core = "*"

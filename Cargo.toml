@@ -2,5 +2,6 @@
 members = [
     "router",
     "handler",
-    "pathparam"
+    "pathparam",
+    "example"
 ]
