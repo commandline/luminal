@@ -32,7 +32,7 @@ impl Service for Router {
     fn call(&self, req: Request) -> Self::Future {
         let route = self.dispatch(req.method(), req.path());
         if let Some(&Some(ref route)) = route {
-            match route.target.handle(HttpRequest::Raw(req)) {
+            match route.target.handle(req.into()) {
                 Ok(response) => response,
                 Err(error) => Box::new(future::ok(
                     Response::new()
