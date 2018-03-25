@@ -31,6 +31,9 @@ pub use handler::{FnRouteBuilder, HandlerRouteBuilder, Router};
 #[cfg(not(feature = "handler"))]
 pub use service::{FnRouteBuilder, Router, ServiceRouteBuilder};
 
+pub use error::Error as LuminalError;
+pub use error::ErrorKind as LuminalErrorKind;
+
 /// Convenience, especially for `hyper::service::service_fn`.
 pub type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
