@@ -55,7 +55,11 @@ respective TODO list.
 * [x] Add a router (see [luminal-router](router/)).
 * [x] Add service utilities (see [luminal-handler](handler/)), an opt in
   simpler interface for handlers.
-* [ ] Add middleware utilities, for wrapping services.
+* [ ] Add middleware utilities, for wrapping handlers.
 * [ ] Add request parameter parsing.
 * [ ] Add body parsing.
+* [ ] Look into syn, quote for deriving data handling
+  * A user could derive this trait for their service/handler
+  * Would consumer the request, offering a strongly typed view into the request data
+  * Could this replace Request in the Handler trait?
 * [ ] Add test utilities.
