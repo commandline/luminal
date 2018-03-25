@@ -4,25 +4,19 @@
 //! request and uses a more liberal error type to allow users to map their own error to an actual
 //! http response.
 extern crate futures;
+extern crate http;
 extern crate hyper;
-extern crate typemap;
 
 use futures::future::{self, Future};
+use hyper::Body;
 use hyper::server::{Request, Response, Service};
-use typemap::TypeMap;
 
 // A convenience alias.
 pub type LuminalFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
-/// Wraps a `hyper::Request` so that luminal can add additional information alongside the request.
-pub enum HttpRequest {
-    Raw(Request),
-    Context { request: Request, context: TypeMap },
-}
-
 /// Trait for handling a request, returning either a success `Response` or an error `Response`.
 pub trait Handler {
-    fn handle(&self, req: HttpRequest) -> Result<LuminalFuture, Response>;
+    fn handle(&self, req: http::Request<Body>) -> Result<LuminalFuture, Response>;
 }
 
 /// An impl of `hyper::Service` that consumes an impl of `Handler`.
@@ -44,8 +38,7 @@ impl<H: Handler> Service for HandlerService<H> {
 
     /// Dispatches to the owned `Handler`, marshalling success or error into the response.
     fn call(&self, request: Request) -> Self::Future {
-        let http_request = HttpRequest::Raw(request);
-        match self.handler.handle(http_request) {
+        match self.handler.handle(request.into()) {
             Ok(response) => response,
             Err(error) => Box::new(future::ok(error)),
         }
@@ -55,7 +48,7 @@ impl<H: Handler> Service for HandlerService<H> {
 /// Accepts a function or closure that takes an `HttpRequest` and returns a compatible `Result`.
 pub fn handler_fn<F>(func: F) -> HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
+    F: Fn(http::Request<Body>) -> Result<LuminalFuture, Response>,
 {
     HandlerFn { func }
 }
@@ -63,16 +56,16 @@ where
 /// Holds a function to dispatch to via its impl of `Handler<E>`.
 pub struct HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
+    F: Fn(http::Request<Body>) -> Result<LuminalFuture, Response>,
 {
     func: F,
 }
 
 impl<F> Handler for HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
+    F: Fn(http::Request<Body>) -> Result<LuminalFuture, Response>,
 {
-    fn handle(&self, req: HttpRequest) -> Result<LuminalFuture, Response> {
+    fn handle(&self, req: http::Request<Body>) -> Result<LuminalFuture, Response> {
         (self.func)(req)
     }
 }
@@ -95,11 +88,13 @@ mod tests {
     }
 
     impl Handler for TestHandler {
-        fn handle(&self, _request: HttpRequest) -> Result<Response, Response> {
+        fn handle(&self, _request: http::Request<Body>) -> Result<LuminalFuture, Response> {
             match *self {
                 TestHandler::Success(ref body) => {
                     let body: String = body.clone();
-                    Ok(Response::new().with_status(StatusCode::Ok).with_body(body))
+                    Ok(Box::new(futures::future::ok(
+                        Response::new().with_status(StatusCode::Ok).with_body(body),
+                    )))
                 }
                 TestHandler::Failure(ref error) => {
                     let body: String = error.clone();
@@ -111,10 +106,12 @@ mod tests {
         }
     }
 
-    fn test_fn(_req: HttpRequest) -> Result<Response, Response> {
-        Ok(Response::new()
-            .with_status(StatusCode::Ok)
-            .with_body(String::from("test")))
+    fn test_fn(_req: http::Request<Body>) -> Result<LuminalFuture, Response> {
+        Ok(Box::new(futures::future::ok(
+            Response::new()
+                .with_status(StatusCode::Ok)
+                .with_body(String::from("test")),
+        )))
     }
 
     #[test]

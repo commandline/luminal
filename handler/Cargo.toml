@@ -1,6 +1,6 @@
 [package]
 name = "luminal-handler"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
 description = "Slightly more convenient API on top of hyper::server::Service"
 homepage = "http://github.com/commandline/luminal/router"
@@ -12,8 +12,8 @@ license = "Apache-2.0"
 
 [dependencies]
 futures = "0.1"
-hyper = "0.11"
-typemap = "0.3"
+http = "0.1"
+hyper = { version = "0.11", features = ["compat"] }
 
 [dev-dependencies]
 tokio-core = "0.1"
