@@ -9,12 +9,15 @@ non-future aware request handling into hyper.
 
 ## TODO
 
-* [ ] Add handler_fn to match hyper's service_fn
+* [x] Add handler_fn to match hyper's service_fn
 * [x] Improve error handling
   * [x] Support status code and response body for error
 * [x] Add tests
-* [ ] Figure out how to pass additional information with requests cleanly
-  * A preliminary enum now exists
-  * Usage is likely to be driven by have luminal-pathparam and luminal-middleware evolve.
+* [x] Figure out how to pass additional information with requests cleanly
 * [ ] Add examples to docs
-* [ ] Add examples to example crate
+* [x] Add examples to example crate
+* [ ] Add macros to make working with responses easier
+* [ ] Remove the Result with a Future and a Response
+  * The idea was better suited when the Result held two Responses
+  * Streaming/async response writing needs the Future
+  * Make a bail or error macro to build a Future with a client error response
