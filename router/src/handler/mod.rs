@@ -5,7 +5,7 @@
 use futures::future;
 use hyper::{self, Method, StatusCode};
 use hyper::server::{Request, Response, Service};
-use luminal_handler::{Handler, HttpRequest};
+use luminal_handler::Handler;
 
 use std::collections::HashMap;
 
@@ -86,6 +86,8 @@ impl Router {
 mod tests {
     extern crate tokio_core;
 
+    use futures;
+    use http;
     use hyper::{self, Body};
     use hyper::header::ContentLength;
     use futures::Stream;
@@ -117,18 +119,27 @@ mod tests {
     }
 
     impl Handler for StringHandler {
-        fn handle(&self, _req: HttpRequest) -> ::std::result::Result<Response, Response> {
-            Ok(Response::new()
-                .with_header(ContentLength(self.0.len() as u64))
-                .with_body(self.0.clone()))
+        fn handle(
+            &self,
+            _req: http::Request<Body>,
+        ) -> ::std::result::Result<LuminalFuture, Response> {
+            Ok(Box::new(futures::future::ok(
+                Response::new()
+                    .with_header(ContentLength(self.0.len() as u64))
+                    .with_body(self.0.clone()),
+            )))
         }
     }
 
-    fn get_bar_handler(_req: HttpRequest) -> ::std::result::Result<Response, Response> {
+    fn get_bar_handler(
+        _req: http::Request<Body>,
+    ) -> ::std::result::Result<LuminalFuture, Response> {
         let msg = String::from("Get bar");
-        Ok(Response::new()
-            .with_header(ContentLength(msg.len() as u64))
-            .with_body(msg))
+        Ok(Box::new(futures::future::ok(
+            Response::new()
+                .with_header(ContentLength(msg.len() as u64))
+                .with_body(msg),
+        )))
     }
 
     #[test]

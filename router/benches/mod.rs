@@ -13,9 +13,9 @@ use hyper::server::{Request, Response};
 use test::Bencher;
 use time::PreciseTime;
 
-use luminal_router::{Router, ServiceFuture};
+use luminal_router::{FnRouteBuilder, LuminalFuture, Router};
 
-fn noop_handler(req: Request) -> ServiceFuture {
+fn noop_handler(req: Request) -> LuminalFuture {
     // consume the request
     ::std::mem::forget(req);
     let msg = String::from("No op");
@@ -28,9 +28,7 @@ fn noop_handler(req: Request) -> ServiceFuture {
 
 #[bench]
 fn bench_empty(bencher: &mut Bencher) {
-    let router = Router {
-        ..Default::default()
-    };
+    let router = FnRouteBuilder::new().build();
 
     bencher.iter(|| router.dispatch(&Method::Get, "/"));
 }
@@ -143,39 +141,35 @@ fn dispatch_ms(_: &mut Bencher) {
 }
 
 fn permute_map(breadth: usize, depth: usize) -> Router {
-    let mut router = Router {
-        ..Default::default()
-    };
+    let mut builder = FnRouteBuilder::new();
     let mut path_prefix = String::from("/");
     for d in 0..depth {
         for path in 0..breadth {
-            router = router
+            builder = builder
                 .get(&format!("{}{}", path_prefix, path), noop_handler)
                 .expect("Failed to add route");
         }
         path_prefix += &format!("{}/", d);
     }
-    router
+    builder.build()
 }
 
 fn permute_map_path(breadth: usize, depth: usize) -> Router {
-    let mut router = Router {
-        ..Default::default()
-    };
+    let mut builder = FnRouteBuilder::new();
     let mut path_prefix = String::from("/");
     for d in 0..depth {
         for path in 0..breadth {
             if path % 3 == 0 {
-                router = router
+                builder = builder
                     .get(&format!("{}:{}", path_prefix, path), noop_handler)
                     .expect("Failed to add route");
             } else {
-                router = router
+                builder = builder
                     .get(&format!("{}{}", path_prefix, path), noop_handler)
                     .expect("Failed to add route");
             }
         }
         path_prefix += &format!("{}/", d);
     }
-    router
+    builder.build()
 }

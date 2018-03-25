@@ -1,7 +1,8 @@
 //! Builders to add implementations of `Handler` and functions for specific methods and routes.
-use hyper::Method;
+use http;
+use hyper::{Body, Method};
 use hyper::server::Response;
-use luminal_handler::{self, Handler, HttpRequest};
+use luminal_handler::{self, Handler};
 
 use std::collections::HashMap;
 
@@ -71,7 +72,7 @@ impl FnRouteBuilder {
     /// Add a `Handler` for `Method::Post` at the specified route.
     pub fn get<F>(mut self, route: &str, function: F) -> Result<Self>
     where
-        F: Fn(HttpRequest) -> ::std::result::Result<LuminalFuture, Response> + 'static,
+        F: Fn(http::Request<Body>) -> ::std::result::Result<LuminalFuture, Response> + 'static,
     {
         {
             self.router
@@ -83,7 +84,7 @@ impl FnRouteBuilder {
     /// Add a `Handler` for `Method::Post` at the specified route.
     pub fn post<F>(mut self, route: &str, function: F) -> Result<Self>
     where
-        F: Fn(HttpRequest) -> ::std::result::Result<LuminalFuture, Response> + 'static,
+        F: Fn(http::Request<Body>) -> ::std::result::Result<LuminalFuture, Response> + 'static,
     {
         {
             self.router

@@ -9,6 +9,8 @@
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
+#[cfg(feature = "handler")]
+extern crate http;
 extern crate hyper;
 #[cfg(feature = "handler")]
 extern crate luminal_handler;
