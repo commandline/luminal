@@ -9,7 +9,7 @@ extern crate luminal_router;
 use futures::future;
 use hyper::header::ContentLength;
 use hyper::Method;
-use hyper::server::{self, Request, Response};
+use hyper::server::{Request, Response};
 use test::Bencher;
 use time::PreciseTime;
 

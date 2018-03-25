@@ -1,6 +1,6 @@
 [package]
 name = "luminal-router"
-version = "0.0.7"
+version = "0.0.8"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
 description = "Minimalist router for hyper.rs"
 homepage = "http://github.com/commandline/luminal/router"
@@ -13,8 +13,12 @@ license = "Apache-2.0"
 [dependencies]
 error-chain = "0.11"
 futures = "0.1"
+luminal-handler = { version = "0.0", optional = true }
 hyper = "0.11"
 
 [dev-dependencies]
 tokio-core = "0.1"
 time = "0.1"
+
+[features]
+handler = ["luminal-handler"]
