@@ -83,29 +83,15 @@ mod tests {
 
     use futures::Stream;
     use hyper::Method;
+    use hyper::{Body, StatusCode};
 
     use self::tokio_core::reactor::Core;
 
     use super::*;
 
-    struct TestError {
-        status: StatusCode,
-        body: String,
-    }
-
-    impl IntoResponse for TestError {
-        fn status(&self) -> StatusCode {
-            self.status
-        }
-
-        fn body(&self) -> Body {
-            self.body.clone().into()
-        }
-    }
-
     enum TestHandler {
         Success(String),
-        Failure(TestError),
+        Failure(String),
     }
 
     impl Handler for TestHandler {
@@ -115,9 +101,12 @@ mod tests {
                     let body: String = body.clone();
                     Ok(Response::new().with_status(StatusCode::Ok).with_body(body))
                 }
-                TestHandler::Failure(ref error) => Err(Response::new()
-                    .with_status(error.status())
-                    .with_body(error.body())),
+                TestHandler::Failure(ref error) => {
+                    let body: String = error.clone();
+                    Err(Response::new()
+                        .with_status(StatusCode::InternalServerError)
+                        .with_body(body))
+                }
             }
         }
     }
@@ -138,10 +127,7 @@ mod tests {
 
     #[test]
     fn test_failure() {
-        let handler = TestHandler::Failure(TestError {
-            status: StatusCode::InternalServerError,
-            body: String::from("Error"),
-        });
+        let handler = TestHandler::Failure(String::from("Error"));
         let service = HandlerService::new(handler);
 
         assert_call(
