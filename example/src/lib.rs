@@ -7,10 +7,10 @@ extern crate luminal_handler;
 extern crate luminal_router;
 
 use futures::{Future, Stream};
-use hyper::{Response, StatusCode};
+use hyper::{Body, Response};
 use hyper::server::Http;
 use luminal_router::{FnRouteBuilder, Router};
-use luminal_handler::{HttpRequest, LuminalFuture};
+use luminal_handler::LuminalFuture;
 
 mod error;
 
@@ -32,34 +32,19 @@ fn routes() -> Result<Router> {
         .build())
 }
 
-fn get_echo(req: HttpRequest) -> ::std::result::Result<LuminalFuture, Response> {
-    if let HttpRequest::Raw(request) = req {
-        if let Some(query) = request.query() {
-            let query = query.to_owned();
-            Ok(Box::new(futures::future::ok(
-                Response::new().with_body(query.to_owned()),
-            )))
-        } else {
-            Ok(Box::new(futures::future::ok(
-                Response::new().with_body("Empty body"),
-            )))
-        }
-    } else {
-        Err(Response::new().with_status(StatusCode::InternalServerError))
-    }
+fn get_echo(req: http::Request<Body>) -> ::std::result::Result<LuminalFuture, Response> {
+    let (parts, ..) = req.into_parts();
+    let query = parts.uri.query().unwrap_or_else(|| "No query string");
+    Ok(Box::new(futures::future::ok(
+        Response::new().with_body(query.to_owned()),
+    )))
 }
 
-fn post_echo(req: HttpRequest) -> ::std::result::Result<LuminalFuture, Response> {
-    if let HttpRequest::Raw(request) = req {
-        Ok(Box::new(
-            request
-                .body()
-                .concat2()
-                .map(|b| Response::new().with_body(b)),
-        ))
-    } else {
-        Err(Response::new().with_status(StatusCode::InternalServerError))
-    }
+fn post_echo(req: http::Request<Body>) -> ::std::result::Result<LuminalFuture, Response> {
+    let (.., body) = req.into_parts();
+    Ok(Box::new(
+        body.concat2().map(|b| Response::new().with_body(b)),
+    ))
 }
 
 #[cfg(test)]
