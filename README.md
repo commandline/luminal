@@ -63,3 +63,6 @@ respective TODO list.
   * Would consumer the request, offering a strongly typed view into the request data
   * Could this replace Request in the Handler trait?
 * [ ] Add test utilities.
+* [ ] Add badges to published crates.
+* [ ] Set up CI with travis.
+* [ ] Add cfg to error on missing docs.
