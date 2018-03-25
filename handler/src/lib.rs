@@ -12,7 +12,7 @@ use hyper::server::{Request, Response, Service};
 use typemap::TypeMap;
 
 // A convenience alias.
-type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
+pub type LuminalFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
 /// Wraps a `hyper::Request` so that luminal can add additional information alongside the request.
 pub enum HttpRequest {
@@ -22,7 +22,7 @@ pub enum HttpRequest {
 
 /// Trait for handling a request, returning either a success `Response` or an error `Response`.
 pub trait Handler {
-    fn handle(&self, req: HttpRequest) -> Result<Response, Response>;
+    fn handle(&self, req: HttpRequest) -> Result<LuminalFuture, Response>;
 }
 
 /// An impl of `hyper::Service` that consumes an impl of `Handler`.
@@ -40,13 +40,13 @@ impl<H: Handler> Service for HandlerService<H> {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = ServiceFuture;
+    type Future = LuminalFuture;
 
     /// Dispatches to the owned `Handler`, marshalling success or error into the response.
     fn call(&self, request: Request) -> Self::Future {
         let http_request = HttpRequest::Raw(request);
         match self.handler.handle(http_request) {
-            Ok(response) => Box::new(future::ok(response)),
+            Ok(response) => response,
             Err(error) => Box::new(future::ok(error)),
         }
     }
@@ -55,7 +55,7 @@ impl<H: Handler> Service for HandlerService<H> {
 /// Accepts a function or closure that takes an `HttpRequest` and returns a compatible `Result`.
 pub fn handler_fn<F>(func: F) -> HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, Response>,
+    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
 {
     HandlerFn { func }
 }
@@ -63,16 +63,16 @@ where
 /// Holds a function to dispatch to via its impl of `Handler<E>`.
 pub struct HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, Response>,
+    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
 {
     func: F,
 }
 
 impl<F> Handler for HandlerFn<F>
 where
-    F: Fn(HttpRequest) -> Result<Response, Response>,
+    F: Fn(HttpRequest) -> Result<LuminalFuture, Response>,
 {
-    fn handle(&self, req: HttpRequest) -> Result<Response, Response> {
+    fn handle(&self, req: HttpRequest) -> Result<LuminalFuture, Response> {
         (self.func)(req)
     }
 }

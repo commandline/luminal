@@ -1,6 +1,6 @@
 [package]
 name = "luminal-handler"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
 description = "Slightly more convenient API on top of hyper::server::Service"
 homepage = "http://github.com/commandline/luminal/router"
