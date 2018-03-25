@@ -35,7 +35,7 @@ pub use error::Error as LuminalError;
 pub use error::ErrorKind as LuminalErrorKind;
 
 /// Convenience, especially for `hyper::service::service_fn`.
-pub type ServiceFuture = Box<Future<Item = Response, Error = hyper::Error>>;
+pub type LuminalFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
 #[cfg(not(feature = "handler"))]
 type LuminalService =

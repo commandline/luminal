@@ -1,6 +1,6 @@
 [package]
 name = "luminal-router"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["Thomas Gideon <cmdln@thecommandline.net>"]
 description = "Minimalist router for hyper.rs"
 homepage = "http://github.com/commandline/luminal/router"

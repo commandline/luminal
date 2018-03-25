@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 mod builder;
 
-use ServiceFuture;
+use LuminalFuture;
 use error::*;
 use tree::RouteTree;
 use route::Route;
@@ -27,13 +27,13 @@ impl Service for Router {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = ServiceFuture;
+    type Future = LuminalFuture;
 
     fn call(&self, req: Request) -> Self::Future {
         let route = self.dispatch(req.method(), req.path());
         if let Some(&Some(ref route)) = route {
             match route.target.handle(HttpRequest::Raw(req)) {
-                Ok(response) => Box::new(future::ok(response)),
+                Ok(response) => response,
                 Err(error) => Box::new(future::ok(
                     Response::new()
                         .with_status(error.status())
@@ -100,7 +100,7 @@ mod tests {
         type Request = Request;
         type Response = Response;
         type Error = hyper::Error;
-        type Future = ServiceFuture;
+        type Future = LuminalFuture;
         fn call(&self, _req: Request) -> Self::Future {
             Box::new(future::ok(
                 Response::new()

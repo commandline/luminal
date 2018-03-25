@@ -6,6 +6,7 @@ use luminal_handler::{self, Handler, HttpRequest};
 use std::collections::HashMap;
 
 use error::*;
+use LuminalFuture;
 use super::Router;
 
 /// Fluent builder, takes ownership of a `Router` while adding routes.
@@ -70,11 +71,23 @@ impl FnRouteBuilder {
     /// Add a `Handler` for `Method::Post` at the specified route.
     pub fn get<F>(mut self, route: &str, function: F) -> Result<Self>
     where
-        F: Fn(HttpRequest) -> ::std::result::Result<Response, Response> + 'static,
+        F: Fn(HttpRequest) -> ::std::result::Result<LuminalFuture, Response> + 'static,
     {
         {
             self.router
                 .add(Method::Get, route, luminal_handler::handler_fn(function))?;
+        }
+        Ok(self)
+    }
+
+    /// Add a `Handler` for `Method::Post` at the specified route.
+    pub fn post<F>(mut self, route: &str, function: F) -> Result<Self>
+    where
+        F: Fn(HttpRequest) -> ::std::result::Result<LuminalFuture, Response> + 'static,
+    {
+        {
+            self.router
+                .add(Method::Post, route, luminal_handler::handler_fn(function))?;
         }
         Ok(self)
     }
